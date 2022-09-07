@@ -1,0 +1,5 @@
+openssl genrsa -out catest.key 4096
+openssl req -x509 -new -nodes -key catest.key -days 3650 -config test.cfg -out catest.pem
+openssl genrsa -out test.key 4096
+openssl req -new -key test.key -out test.csr -config test.cfg
+openssl x509 -req -in test.csr -CA catest.pem -CAkey catest.key -CAcreateserial  -out test.crt -days 365

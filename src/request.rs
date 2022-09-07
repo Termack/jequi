@@ -1,15 +1,49 @@
-use std::io::{Read, ErrorKind,Result,Error};
+use std::io::{Read, ErrorKind,Result,Error, Write};
 use std::collections::HashMap;
 use std::borrow::Cow;
 
-pub struct RawRequest<'a, T: Read> {
-    pub stream: Box<T>,
+use openssl::ssl::SslStream;
+
+pub enum RawStream<T> {
+    Ssl(SslStream<T>),
+    Normal(T)
+}
+
+impl<S> Read for RawStream<S> where S: Read + Write
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        match *self {
+            RawStream::Ssl(ref mut s) => s.read(buf),
+            RawStream::Normal(ref mut s) => s.read(buf),
+        }
+    }
+}
+
+impl<S> Write for RawStream<S> where S: Read + Write
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        match *self {
+            RawStream::Ssl(ref mut s) => s.write(buf),
+            RawStream::Normal(ref mut s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        match *self {
+            RawStream::Ssl(ref mut s) => s.flush(),
+            RawStream::Normal(ref mut s) => s.flush(),
+        }
+    }
+}
+
+pub struct RawRequest<'a, T> {
+    pub stream: RawStream<T>,
     pub buffer: &'a mut [u8],
     pub start: usize,
     pub end: usize,
 }
 
-pub struct Request<'a, T: Read> {
+pub struct Request<'a, T> {
     pub raw: RawRequest<'a, T>,
     pub method: String,
     pub uri: String,
@@ -18,11 +52,11 @@ pub struct Request<'a, T: Read> {
 }
 
 
-impl<'a, T: Read> Request<'a, T> {
-    pub fn new(stream: Box<T>,buffer: &mut [u8]) -> Request<T>{
+impl<'a, T: Read + Write> Request<'a, T> {
+    pub fn new(stream: T,buffer: &mut [u8]) -> Request<T>{
         Request{
             raw:RawRequest{
-                stream,
+                stream: RawStream::Normal(stream),
                 buffer,
                 start: 0,
                 end: 0,
@@ -209,15 +243,17 @@ impl<'a, T: Read> Request<'a, T> {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]
     fn parse_first_line_test() {
-        let requests_in: Vec<&[u8]> = vec![
-            b"GET / HTTP/1.1 \n",
-            b"POST /bla HTTP/2.0\n",
-            b"PUT  /ab cd HTTP/1.2\n",
-            b"  GET  / a adfsdab  HTTP/1.1 \n"
+        let requests_in: Vec<Vec<u8>> = vec![
+            Vec::from("GET / HTTP/1.1 \n"),
+            Vec::from("POST /bla HTTP/2.0\n"),
+            Vec::from("PUT  /ab cd HTTP/1.2\n"),
+            Vec::from("  GET  / a adfsdab  HTTP/1.1 \n")
         ];
 
         #[derive(Debug)]
@@ -242,7 +278,7 @@ mod tests {
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0;35];
-            let mut req = Request::new(Box::new(*r),&mut buf);
+            let mut req = Request::new(Cursor::new(r.clone()),&mut buf);
             
             let err = req.parse_first_line();
 
@@ -254,33 +290,33 @@ mod tests {
 
     #[test]
     fn parse_headers_test() {
-        let requests_in: Vec<&[u8]> = vec![
-            b"\
+        let requests_in: Vec<Vec<u8>> = vec![
+            Vec::from("\
 GET / HTTP/1.1 
 Host: example.com
 Content-Type: application/json
 
-",
-            b"\
+"),
+            Vec::from("\
 POST /bla HTTP/2.0
 User-Agent: Mozilla
 Accept-Encoding: gzip
 
-",
-            b"\
+"),
+            Vec::from("\
 PUT  /ab cd HTTP/1.2
 Host: host.com
 Cookies: aa=bb
 
-",
-            b"\
+"),
+            Vec::from("\
   GET  / a adfsdab  HTTP/1.1 
 Bla: bla
 Ble: ble
 Header: haaa
 Wowo: 10034mc amk
 
-"
+")
         ];
 
         let expected_results: Vec<HashMap<String,String>> = vec![
@@ -302,7 +338,7 @@ Wowo: 10034mc amk
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0; 35];
-            let mut req = Request::new(Box::new(*r),&mut buf);
+            let mut req = Request::new(Cursor::new(r.clone()),&mut buf);
 
             let err = req.parse_first_line();
 

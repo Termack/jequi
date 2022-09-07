@@ -1,0 +1,12 @@
+openssl req -x509 -sha256 -days 1825 -newkey rsa:2048 -keyout rootCA.key -out rootCA.crt
+openssl req -x509 -days 1825 -newkey rsa:2048 -keyout rootCA.key -out rootCA.crt 
+openssl genrsa -out intermediate.key 2048
+openssl req -key intermediate.key -new -out intermediate.csr
+openssl x509 -req -CA rootCA.crt -CAkey rootCA.key -in intermediate.csr -out intermediate.crt -days 365 -CAcreateserial -extfile intermediate.ext
+openssl genrsa -out localhost.key 2048
+openssl req -key localhost.key -new -out localhost.csr
+openssl x509 -req -CA intermediate.crt -CAkey intermediate.key -in localhost.csr -out localhost.crt -days 365 -CAcreateserial -extfile localhost.ext
+openssl x509 -in localhost.crt -out localhost.pem
+openssl x509 -in intermediate.crt -out intermediate.pem
+openssl x509 -in rootCA.crt -out rootCA.pem
+cat localhost.pem intermediate.pem rootCA.pem > localhost.chain

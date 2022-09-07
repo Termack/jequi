@@ -3,12 +3,16 @@ use std::net::{TcpStream, TcpListener};
 use jequi::request;
 
 fn handle_connection(stream: TcpStream) {
-    let mut buffer = [0;10];
-    let mut req = request::Request::new(Box::new(stream), &mut buffer);
+    let mut buffer = [0;1024];
+    let tls_active = true;
+    let mut req;
+    if tls_active {
+        req = request::Request::ssl_new(stream, &mut buffer);
+    }else {
+        req = request::Request::new(stream, &mut buffer);
+    }
 
-    req.ssl_hello();
-
-    req.parse_first_line();
+    req.parse_first_line().unwrap();
 
     println!("{} {} {}",req.method,req.uri,req.version);
 }
