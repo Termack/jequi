@@ -7,9 +7,4 @@ edition = "2021"
 
 [dependencies]
 
-#openssl = "0.10.41"
-openssl = { path = "../rust-openssl/openssl" }
-openssl-errors = { path = "../rust-openssl/openssl-errors" }
-openssl-macros = { path = "../rust-openssl/openssl-macros" }
-openssl-sys = { path = "../rust-openssl/openssl-sys" }
-systest = { path = "../rust-openssl/systest" }
+openssl = "0.10.41"

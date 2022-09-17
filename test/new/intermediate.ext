@@ -1,3 +1,0 @@
-authorityKeyIdentifier=keyid,issuer
-basicConstraints=CA:TRUE
-keyUsage = keyCertSign, cRLSign, digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment

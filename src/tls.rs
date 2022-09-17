@@ -2,62 +2,40 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Write, Read};
 use std::sync::Arc;
-use openssl::error::ErrorStack;
-use openssl::ssl::{SslAcceptor, SslMethod, SslRef, SslAlert, ClientHelloResponse, NameType, SniError, SslFiletype, SslStream};
+
+use openssl::ssl::{SslAcceptor, SslMethod, SslRef, SslAlert, SniError, SslContextBuilder};
+use openssl::pkey::PKey;
+use openssl::x509::X509;
 
 use crate::request::{RawRequest, RawStream};
 
 use super::request::Request;
 
-// CHAIN CERTS
-
-fn sni(sslRef: &mut SslRef, sslAlert: &mut SslAlert) -> Result<(), SniError>{
-    println!("{:?}",sslRef.state_string_long());
-    println!("{:?}",sslRef.version_str());
-    println!("{:?}",sslRef.verify_mode());
-    println!("{:?}",sslRef.verify_result());
-    // println!("{:?}",sslRef.servername(NameType::HOST_NAME).unwrap());
-    println!("{:?}",sslRef.servername_raw(NameType::HOST_NAME));
-    // sslRef.set_certificate_file("/home/filipe/projects/jequi/test/test.crt",SslFiletype::PEM).unwrap();
-    // sslRef.set_certificate_chain_file("/home/filipe/projects/jequi/test/new/localhost.chain").unwrap();
-    Ok(())
-    // Err(SniError::NOACK)
-}
-
-fn client_hello(sslRef: &mut SslRef, sslAlert: &mut SslAlert) -> Result<ClientHelloResponse, ErrorStack> {
-    println!("{:?}",sslRef.client_hello_ciphers());
-    println!("{:?}",sslRef.version_str());
-    println!("{:?}",sslRef.verify_mode());
-    println!("{:?}",sslRef.verify_result());
-    println!("{:?}",sslRef.state_string_long());
-    println!("{:?}",sslRef.servername_raw(NameType::HOST_NAME));
-    Ok(ClientHelloResponse::SUCCESS)
-    // Err(ErrorStack::get())
-}
-
-fn handle_client<T: Read + Write>(mut stream: SslStream<&mut Box<T>>) {
-    stream.write(b"\
-HTTP/1.1 200
-date: Sun, 04 Sep 2022 21:27:58 GMT
-content-type: application/octet-stream
-server: gocache
-
-").unwrap();
-    stream.shutdown().unwrap();
-}
+static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
+static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
+static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
 impl<'a, T: Read + Write + Debug> Request<'a, T> {
     pub fn ssl_new(stream: T,buffer: &mut [u8]) -> Request<T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-        // https://www.openssl.org/docs/manmaster/man3/SSL_use_certificate.html
-        acceptor.set_private_key_file("/home/filipe/projects/jequi/test/new/localhost.key", SslFiletype::PEM).unwrap();
-        acceptor.set_certificate_chain_file("/home/filipe/projects/jequi/test/new/localhost.chain").unwrap();
-        acceptor.set_verify_depth(5);
-        // acceptor.check_private_key().unwrap();
-        acceptor.set_client_hello_callback(client_hello);
-        acceptor.set_servername_callback(sni);
-        // acceptor.set_cipher_list("DEFAULT").unwrap();
-        // acceptor.set_ciphersuites("TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256").unwrap();
+        acceptor.set_servername_callback(
+            |ssl_ref: &mut SslRef,
+             _ssl_alert: &mut SslAlert|
+             -> Result<(), SniError> {
+                let key = PKey::private_key_from_pem(LEAF_KEY).unwrap();
+                let cert = X509::from_pem(LEAF_CERT).unwrap();
+                let intermediate = X509::from_pem(INTERMEDIATE_CERT).unwrap();
+
+                let mut ctx_builder = SslContextBuilder::new(SslMethod::tls()).unwrap();
+
+                ctx_builder.set_private_key(&key).unwrap();
+                ctx_builder.set_certificate(&cert).unwrap();
+                ctx_builder.add_extra_chain_cert(intermediate).unwrap();
+
+                ssl_ref.set_ssl_context(&ctx_builder.build()).unwrap();
+                Ok(())
+            },
+        );
         let acceptor = Arc::new(acceptor.build());
         let stream = acceptor.accept(stream).unwrap();
         
@@ -73,5 +51,64 @@ impl<'a, T: Read + Write + Debug> Request<'a, T> {
             version:String::new(),
             headers:HashMap::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+    use std::{net::{TcpStream, TcpListener}, io::Write, thread};
+
+    use openssl::ssl::SslContextBuilder;
+    use openssl::{ssl::{SslConnector, SslMethod, SslAcceptor, SslRef, SslAlert, SniError}, x509::X509, pkey::PKey};
+
+    static ROOT_CERT_PATH: &str = "test/root-ca.pem";
+    static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
+    static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
+    static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
+
+    #[test]
+    fn test_dynamic_cert() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+    
+        let t = thread::spawn(move || {
+            let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+            acceptor.set_servername_callback(
+                |ssl_ref: &mut SslRef,
+                 _ssl_alert: &mut SslAlert|
+                 -> Result<(), SniError> {
+                    let key = PKey::private_key_from_pem(LEAF_KEY).unwrap();
+                    let cert = X509::from_pem(LEAF_CERT).unwrap();
+                    let intermediate = X509::from_pem(INTERMEDIATE_CERT).unwrap();
+                    let mut ctx_builder = SslContextBuilder::new(SslMethod::tls()).unwrap();
+
+                    ctx_builder.set_private_key(&key).unwrap();
+                    ctx_builder.set_certificate(&cert).unwrap();
+                    ctx_builder.add_extra_chain_cert(intermediate).unwrap();
+
+                    ssl_ref.set_ssl_context(&ctx_builder.build()).unwrap();
+                    Ok(())
+                },
+            );
+            let acceptor = acceptor.build();
+            let stream = listener.accept().unwrap().0;
+            let mut stream = acceptor.accept(stream).unwrap();
+    
+            stream.write_all(b"hello").unwrap();
+        });
+    
+        let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+        connector.set_ca_file(ROOT_CERT_PATH).unwrap();
+        let connector = connector.build();
+    
+        let stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let mut stream = connector.connect("localhost", stream).unwrap();
+    
+        let mut buf = [0; 5];
+        stream.read_exact(&mut buf).unwrap();
+        assert_eq!(b"hello", &buf);
+    
+        t.join().unwrap();
     }
 }
