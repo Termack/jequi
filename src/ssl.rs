@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Write, Read};
 use std::sync::Arc;
@@ -7,16 +6,14 @@ use openssl::ssl::{SslAcceptor, SslMethod, SslRef, SslAlert, SniError, SslContex
 use openssl::pkey::PKey;
 use openssl::x509::X509;
 
-use crate::request::{RawRequest, RawStream};
-
-use super::request::Request;
+use crate::{HttpConn, RawStream};
 
 static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
 static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
-impl<'a, T: Read + Write + Debug> Request<'a, T> {
-    pub fn ssl_new(stream: T,buffer: &mut [u8]) -> Request<T> {
+impl<'a, T: Read + Write + Debug> HttpConn<'a, T> {
+    pub fn ssl_new(stream: T,buffer: &mut [u8]) -> HttpConn<T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         acceptor.set_servername_callback(
             |ssl_ref: &mut SslRef,
@@ -39,29 +36,18 @@ impl<'a, T: Read + Write + Debug> Request<'a, T> {
         let acceptor = Arc::new(acceptor.build());
         let stream = acceptor.accept(stream).unwrap();
         
-        Request{
-            raw:RawRequest{
-                stream: RawStream::Ssl(stream),
-                buffer,
-                start: 0,
-                end: 0,
-            },
-            method:String::new(),
-            uri:String::new(),
-            version:String::new(),
-            headers:HashMap::new()
-        }
+        HttpConn::new(RawStream::Ssl(stream), buffer)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read};
+    use std::io::Read;
     use std::{net::{TcpStream, TcpListener}, io::Write, thread};
 
-    use openssl::{ssl::{SslConnector, SslMethod}};
+    use openssl::ssl::{SslConnector, SslMethod};
 
-    use crate::request::{Request, RawStream};
+    use crate::{HttpConn, RawStream};
 
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
 
@@ -74,7 +60,7 @@ mod tests {
             let stream = listener.accept().unwrap().0;
     
             let mut buf = [0;35];
-            let req = Request::ssl_new(stream,&mut buf);
+            let req = HttpConn::ssl_new(stream,&mut buf);
             
             if let RawStream::Ssl(mut stream) = req.raw.stream {
                 stream.write_all(b"hello").unwrap()

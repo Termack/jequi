@@ -1,73 +1,9 @@
 use std::io::{Read, ErrorKind,Result,Error, Write};
-use std::collections::HashMap;
 use std::borrow::Cow;
 
-use openssl::ssl::SslStream;
+use crate::HttpConn;
 
-pub enum RawStream<T> {
-    Ssl(SslStream<T>),
-    Normal(T)
-}
-
-impl<S> Read for RawStream<S> where S: Read + Write
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        match *self {
-            RawStream::Ssl(ref mut s) => s.read(buf),
-            RawStream::Normal(ref mut s) => s.read(buf),
-        }
-    }
-}
-
-impl<S> Write for RawStream<S> where S: Read + Write
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        match *self {
-            RawStream::Ssl(ref mut s) => s.write(buf),
-            RawStream::Normal(ref mut s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        match *self {
-            RawStream::Ssl(ref mut s) => s.flush(),
-            RawStream::Normal(ref mut s) => s.flush(),
-        }
-    }
-}
-
-pub struct RawRequest<'a, T> {
-    pub stream: RawStream<T>,
-    pub buffer: &'a mut [u8],
-    pub start: usize,
-    pub end: usize,
-}
-
-pub struct Request<'a, T> {
-    pub raw: RawRequest<'a, T>,
-    pub method: String,
-    pub uri: String,
-    pub version: String,
-    pub headers: HashMap<String,String>,
-}
-
-
-impl<'a, T: Read + Write> Request<'a, T> {
-    pub fn new(stream: T,buffer: &mut [u8]) -> Request<T>{
-        Request{
-            raw:RawRequest{
-                stream: RawStream::Normal(stream),
-                buffer,
-                start: 0,
-                end: 0,
-            },
-            method:String::new(),
-            uri:String::new(),
-            version:String::new(),
-            headers:HashMap::new()
-        }
-    }
-
+impl<'a, T: Read + Write> HttpConn<'a, T> {
     pub fn parse_first_line(&mut self) -> Result<()> {
         struct StringIndex (Option<usize>,Option<usize>);
     
@@ -136,10 +72,10 @@ impl<'a, T: Read + Write> Request<'a, T> {
         let version_index = (version_index.0.ok_or(Error::new(ErrorKind::Other,version_err)),version_index.1.ok_or(Error::new(ErrorKind::Other,version_err)));
 
 
-        self.method = String::from_utf8_lossy(
+        self.request.method = String::from_utf8_lossy(
             &self.raw.buffer[method_index.0?..method_index.1?]
         ).to_string();
-        self.uri = String::from_utf8_lossy(
+        self.request.uri = String::from_utf8_lossy(
             &self.raw.buffer[uri_index.0?..uri_index.1?]
         ).to_string();
         self.version = String::from_utf8_lossy(
@@ -169,7 +105,7 @@ impl<'a, T: Read + Write> Request<'a, T> {
                         value = &buffer[value_start..i];
                     }
                     let value = String::from_utf8_lossy(value).to_string();
-                    self.headers.insert(header.trim().to_lowercase(), value.trim().to_string());
+                    self.request.headers.insert(header.trim().to_lowercase(), value.trim().to_string());
                 }else{
                     return (true,&[],Err(Error::new(ErrorKind::InvalidData,"Malformed header")));
                 }
@@ -243,7 +179,9 @@ impl<'a, T: Read + Write> Request<'a, T> {
 #[cfg(test)]
 mod tests {
 
-    use std::io::Cursor;
+    use std::{io::Cursor, collections::HashMap};
+
+    use crate::RawStream;
 
     use super::*;
 
@@ -278,13 +216,13 @@ mod tests {
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0;35];
-            let mut req = Request::new(Cursor::new(r.clone()),&mut buf);
+            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf);
             
             let err = req.parse_first_line();
 
             err.unwrap();
 
-            assert_eq!(expected_results[i],new_result(req.method, req.uri, req.version, req.raw.start), "Testing parse for line: {}",String::from_utf8_lossy(r))
+            assert_eq!(expected_results[i],new_result(req.request.method, req.request.uri, req.version, req.raw.start), "Testing parse for line: {}",String::from_utf8_lossy(r))
         }
     }
 
@@ -338,7 +276,7 @@ Wowo: 10034mc amk
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0; 35];
-            let mut req = Request::new(Cursor::new(r.clone()),&mut buf);
+            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf);
 
             let err = req.parse_first_line();
 
@@ -348,7 +286,7 @@ Wowo: 10034mc amk
 
             err.unwrap();
 
-            assert_eq!(expected_results[i],req.headers, "Testing parse headers for request: {}",String::from_utf8_lossy(r))
+            assert_eq!(expected_results[i],req.request.headers, "Testing parse headers for request: {}",String::from_utf8_lossy(r))
         }
     }
 }
