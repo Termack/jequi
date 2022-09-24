@@ -52,7 +52,7 @@ mod tests {
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
 
     #[test]
-    fn ssl_new_test() {
+    fn ssl_handshake_test() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
 

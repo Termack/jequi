@@ -19,8 +19,12 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
                 self.raw.end = n;
                 for i in 0..n {
                     if bytes[i] == b'\n'{
+                        let mut index_end = i;
+                        if bytes[i-1] == b'\r'{
+                            index_end = i-1
+                        }
                         if version_index.1 == None {
-                            version_index.1 = Some(i);
+                            version_index.1 = Some(index_end);
                         }
                         self.raw.start = i+1;
                         break;
@@ -101,8 +105,14 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
                 line_start = None;
                 if let Some(ref header) = header {
                     let mut value: &[u8] = &[];
+                    let mut value_end = i;
+                    if let Some(prev) = buffer.get(i-1){
+                        if *prev == b'\r' {
+                            value_end = i-1
+                        }
+                    }
                     if value_start != i {
-                        value = &buffer[value_start..i];
+                        value = &buffer[value_start..value_end];
                     }
                     let value = String::from_utf8_lossy(value).to_string();
                     self.request.headers.insert(header.trim().to_lowercase(), value.trim().to_string());
@@ -179,7 +189,9 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
 #[cfg(test)]
 mod tests {
 
-    use std::{io::Cursor, collections::HashMap};
+    use std::io::Cursor;
+
+    use indexmap::IndexMap;
 
     use crate::RawStream;
 
@@ -257,17 +269,17 @@ Wowo: 10034mc amk
 ")
         ];
 
-        let expected_results: Vec<HashMap<String,String>> = vec![
-            HashMap::from([
+        let expected_results: Vec<IndexMap<String,String>> = vec![
+            IndexMap::from([
                 ("host".to_string(),"example.com".to_string()),
                 ("content-type".to_string(),"application/json".to_string())]),
-            HashMap::from([
+            IndexMap::from([
                 ("user-agent".to_string(),"Mozilla".to_string()),
                 ("accept-encoding".to_string(),"gzip".to_string())]),
-            HashMap::from([
+            IndexMap::from([
                 ("host".to_string(),"host.com".to_string()),
                 ("cookies".to_string(),"aa=bb".to_string())]),
-            HashMap::from([
+            IndexMap::from([
                 ("bla".to_string(),"bla".to_string()),
                 ("ble".to_string(),"ble".to_string()),
                 ("header".to_string(),"haaa".to_string()),
@@ -278,13 +290,9 @@ Wowo: 10034mc amk
             let mut buf = [0; 35];
             let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf);
 
-            let err = req.parse_first_line();
-
-            err.unwrap();
+            req.parse_first_line().unwrap();
             
-            let err = req.parse_headers();
-
-            err.unwrap();
+            req.parse_headers().unwrap();
 
             assert_eq!(expected_results[i],req.request.headers, "Testing parse headers for request: {}",String::from_utf8_lossy(r))
         }

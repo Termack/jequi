@@ -2,19 +2,27 @@ use std::net::{TcpStream, TcpListener};
 
 use jequi::{HttpConn, RawStream};
 
+use chrono::Utc;
+
 fn handle_connection(stream: TcpStream) {
     let mut buffer = [0;1024];
     let tls_active = true;
-    let mut req;
+    let mut http;
     if tls_active {
-        req = HttpConn::ssl_new(stream, &mut buffer);
+        http = HttpConn::ssl_new(stream, &mut buffer);
     }else {
-        req = HttpConn::new(RawStream::Normal(stream), &mut buffer);
+        http = HttpConn::new(RawStream::Normal(stream), &mut buffer);
     }
 
-    req.parse_first_line().unwrap();
+    http.parse_first_line().unwrap();
 
-    println!("{} {} {}",req.request.method,req.request.uri,req.version);
+    http.response.set_header("server", "jequi");
+    http.response.set_header("date", &Utc::now().format("%a, %e %b %Y %T GMT").to_string());
+    http.response.status = 200;
+
+    http.write_response().unwrap();
+
+    println!("method:{} uri:{} version:{}",http.request.method,http.request.uri,http.version);
 }
 
 fn main() {

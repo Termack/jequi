@@ -1,9 +1,11 @@
 #![feature(io_error_more)]
-pub mod request;
 pub mod ssl;
+pub mod request;
+pub mod response;
 
-use std::{collections::HashMap, io::{Result,Read, Write}};
+use std::io::{Result,Read, Write};
 
+use indexmap::IndexMap;
 use openssl::ssl::SslStream;
 
 pub enum RawStream<T: Read + Write> {
@@ -48,12 +50,12 @@ pub struct RawHTTP<'a, T: Read + Write> {
 pub struct Request {
     pub method: String,
     pub uri: String,
-    pub headers: HashMap<String,String>,
+    pub headers: IndexMap<String,String>,
 }
 
 pub struct Response {
     pub status: usize,
-    pub headers: HashMap<String,String>,
+    pub headers: IndexMap<String,String>,
 }
 
 pub struct HttpConn<'a, T: Read + Write> {
@@ -76,11 +78,11 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
             request: Request { 
                 method:String::new(),
                 uri:String::new(),
-                headers:HashMap::new() 
+                headers:IndexMap::new() 
             },
             response: Response {
                 status: 0,
-                headers: HashMap::new()
+                headers: IndexMap::new()
             }
         }
     }
