@@ -53,24 +53,26 @@ pub struct Request {
     pub headers: IndexMap<String,String>,
 }
 
-pub struct Response {
+pub struct Response<'a> {
     pub status: usize,
     pub headers: IndexMap<String,String>,
+    pub body_buffer: &'a mut [u8],
+    pub body_length: usize,
 }
 
 pub struct HttpConn<'a, T: Read + Write> {
     pub raw: RawHTTP<'a, T>,
     pub version: String,
     pub request: Request,
-    pub response: Response,
+    pub response: Response<'a>,
 }
 
 impl<'a, T: Read + Write> HttpConn<'a, T> {
-    pub fn new(stream: RawStream<T>,buffer: &mut [u8]) -> HttpConn<T>{
+    pub fn new(stream: RawStream<T>,read_buffer: &'a mut [u8],body_buffer: &'a mut [u8]) -> HttpConn<'a, T>{
         HttpConn{
             raw:RawHTTP{
                 stream,
-                buffer,
+                buffer: read_buffer,
                 start: 0,
                 end: 0,
             },
@@ -78,11 +80,13 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
             request: Request { 
                 method:String::new(),
                 uri:String::new(),
-                headers:IndexMap::new() 
+                headers:IndexMap::new(),
             },
             response: Response {
                 status: 0,
-                headers: IndexMap::new()
+                headers: IndexMap::new(),
+                body_buffer,
+                body_length: 0,
             }
         }
     }

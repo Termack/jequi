@@ -13,7 +13,7 @@ static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
 impl<'a, T: Read + Write + Debug> HttpConn<'a, T> {
-    pub fn ssl_new(stream: T,buffer: &mut [u8]) -> HttpConn<T> {
+    pub fn ssl_new(stream: T,read_buffer: &'a mut [u8], body_buffer: &'a mut [u8]) -> HttpConn<'a, T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         acceptor.set_servername_callback(
             |ssl_ref: &mut SslRef,
@@ -36,7 +36,7 @@ impl<'a, T: Read + Write + Debug> HttpConn<'a, T> {
         let acceptor = Arc::new(acceptor.build());
         let stream = acceptor.accept(stream).unwrap();
         
-        HttpConn::new(RawStream::Ssl(stream), buffer)
+        HttpConn::new(RawStream::Ssl(stream), read_buffer, body_buffer)
     }
 }
 
@@ -60,7 +60,7 @@ mod tests {
             let stream = listener.accept().unwrap().0;
     
             let mut buf = [0;35];
-            let req = HttpConn::ssl_new(stream,&mut buf);
+            let req = HttpConn::ssl_new(stream,&mut buf, &mut [0;0]);
             
             if let RawStream::Ssl(mut stream) = req.raw.stream {
                 stream.write_all(b"hello").unwrap()

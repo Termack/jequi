@@ -228,7 +228,7 @@ mod tests {
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0;35];
-            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf);
+            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf, &mut [0;0]);
             
             let err = req.parse_first_line();
 
@@ -288,7 +288,7 @@ Wowo: 10034mc amk
 
         for (i,r) in requests_in.iter().enumerate() {
             let mut buf = [0; 35];
-            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf);
+            let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())),&mut buf, &mut [0;0]);
 
             req.parse_first_line().unwrap();
             

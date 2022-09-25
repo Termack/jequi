@@ -5,13 +5,14 @@ use jequi::{HttpConn, RawStream};
 use chrono::Utc;
 
 fn handle_connection(stream: TcpStream) {
-    let mut buffer = [0;1024];
+    let mut read_buffer = [0;1024];
+    let mut body_buffer = [0;1024];
     let tls_active = true;
     let mut http;
     if tls_active {
-        http = HttpConn::ssl_new(stream, &mut buffer);
+        http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer);
     }else {
-        http = HttpConn::new(RawStream::Normal(stream), &mut buffer);
+        http = HttpConn::new(RawStream::Normal(stream), &mut read_buffer, &mut body_buffer);
     }
 
     http.parse_first_line().unwrap();
@@ -19,6 +20,7 @@ fn handle_connection(stream: TcpStream) {
     http.response.set_header("server", "jequi");
     http.response.set_header("date", &Utc::now().format("%a, %e %b %Y %T GMT").to_string());
     http.response.status = 200;
+    http.response.write_body(b"hello world\n").unwrap();
 
     http.write_response().unwrap();
 
