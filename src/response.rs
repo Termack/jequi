@@ -1,30 +1,40 @@
-use std::{io::{Read, Write, Result, ErrorKind,Error}, cmp};
+use std::{
+    cmp,
+    io::{Error, ErrorKind, Read, Result, Write},
+};
 
 use crate::{HttpConn, Response};
 
 impl<'a, T: Read + Write> HttpConn<'a, T> {
     pub fn write_response(&mut self) -> Result<()> {
-        let status_line = format!("{} {}\n",self.version,self.response.status);
+        let status_line = format!("{} {}\n", self.version, self.response.status);
         self.raw.stream.write(status_line.as_bytes()).unwrap();
         let content_length = self.response.body_length;
         if content_length > 0 {
-            self.response.set_header("content-length", &content_length.to_string());
+            self.response
+                .set_header("content-length", &content_length.to_string());
         }
         for (key, value) in &self.response.headers {
-            let header = format!("{}: {}\n",key,value);
+            let header = format!("{}: {}\n", key, value);
             self.raw.stream.write(header.as_bytes()).unwrap();
         }
         self.raw.stream.write(b"\n").unwrap();
         if content_length > 0 {
-            self.raw.stream.write(&self.response.body_buffer[..content_length]).unwrap();
+            self.raw
+                .stream
+                .write(&self.response.body_buffer[..content_length])
+                .unwrap();
         }
         Ok(())
     }
 }
 
 impl<'a> Response<'a> {
-    pub fn set_header(&mut self, header: &str, value: &str ) -> Option<String> {
-        self.headers.insert(header.to_string().trim().to_lowercase(), value.to_string().trim().to_string())
+    pub fn set_header(&mut self, header: &str, value: &str) -> Option<String> {
+        self.headers.insert(
+            header.to_string().trim().to_lowercase(),
+            value.to_string().trim().to_string(),
+        )
     }
 
     pub fn get_header(&mut self, header: &str) -> Option<&String> {
@@ -37,7 +47,10 @@ impl<'a> Response<'a> {
         body_buffer[..length].copy_from_slice(&bytes[..length]);
         self.body_length += length;
         if length != bytes.len() {
-            return Err(Error::new(ErrorKind::FileTooLarge,"not all bytes were written"));
+            return Err(Error::new(
+                ErrorKind::FileTooLarge,
+                "not all bytes were written",
+            ));
         }
         Ok(length)
     }
@@ -45,34 +58,39 @@ impl<'a> Response<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Cursor};
+    use std::io::{Cursor, Read};
 
     use indexmap::IndexMap;
 
-    use crate::{HttpConn, RawHTTP, Request, Response, RawStream};
+    use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
 
-    fn new_response<'a>(headers: IndexMap<String,String>, status: usize, version: String, body: &'a mut [u8]) -> HttpConn<'a, Cursor<Vec<u8>>> {
+    fn new_response<'a>(
+        headers: IndexMap<String, String>,
+        status: usize,
+        version: String,
+        body: &'a mut [u8],
+    ) -> HttpConn<'a, Cursor<Vec<u8>>> {
         let stream: Vec<u8> = Vec::new();
         let len = body.len();
-        HttpConn{
-            raw:RawHTTP{
+        HttpConn {
+            raw: RawHTTP {
                 stream: RawStream::Normal(Cursor::new(stream)),
                 buffer: &mut [],
                 start: 0,
                 end: 0,
             },
             version,
-            request: Request { 
-                method:String::new(),
-                uri:String::new(),
-                headers:IndexMap::new() 
+            request: Request {
+                method: String::new(),
+                uri: String::new(),
+                headers: IndexMap::new(),
             },
             response: Response {
                 status,
                 headers,
                 body_buffer: body,
                 body_length: len,
-            }
+            },
         }
     }
 
@@ -86,31 +104,38 @@ mod tests {
         let responses_in: Vec<HttpConn<Cursor<Vec<u8>>>> = vec![
             new_response(
                 IndexMap::from([
-                    ("server".to_string(),"jequi".to_string()),
-                    ("content-type".to_string(),"application/json".to_string())]
-                ),
+                    ("server".to_string(), "jequi".to_string()),
+                    ("content-type".to_string(), "application/json".to_string()),
+                ]),
                 301,
                 "HTTP/1.1".to_string(),
-                &mut bodies.0
+                &mut bodies.0,
             ),
             new_response(
                 IndexMap::from([
-                    ("cache-control".to_string(),"max-age=1296000".to_string()),
-                    ("strict-transport-security".to_string(),"max-age=31536000".to_string())]
-                ),
+                    ("cache-control".to_string(), "max-age=1296000".to_string()),
+                    (
+                        "strict-transport-security".to_string(),
+                        "max-age=31536000".to_string(),
+                    ),
+                ]),
                 200,
                 "HTTP/2".to_string(),
-                &mut bodies.1
+                &mut bodies.1,
             ),
             new_response(
                 IndexMap::from([
-                    ("content-length".to_string(),"1565".to_string()),
-                    ("set-cookie".to_string(),"PHPSESSID=bla; path=/; domain=.example.com;HttpOnly;Secure;SameSite=None".to_string())]
-                ),
+                    ("content-length".to_string(), "1565".to_string()),
+                    (
+                        "set-cookie".to_string(),
+                        "PHPSESSID=bla; path=/; domain=.example.com;HttpOnly;Secure;SameSite=None"
+                            .to_string(),
+                    ),
+                ]),
                 404,
                 "HTTP/1".to_string(),
-                &mut bodies.2
-            )
+                &mut bodies.2,
+            ),
         ];
 
         let expected_responses: Vec<&[u8]> = vec![
@@ -139,46 +164,48 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         for (i, mut r) in responses_in.into_iter().enumerate() {
             r.write_response().unwrap();
 
-            let buf = &mut [0;1024];
+            let buf = &mut [0; 1024];
             let mut n = 0;
             if let RawStream::Normal(mut stream) = r.raw.stream {
                 stream.set_position(0);
-                
+
                 n = stream.read(buf).unwrap();
             }
 
-            assert_eq!(String::from_utf8_lossy(&buf[..n]),String::from_utf8_lossy(expected_responses[i]))
+            assert_eq!(
+                String::from_utf8_lossy(&buf[..n]),
+                String::from_utf8_lossy(expected_responses[i])
+            )
         }
     }
 
     #[test]
     fn get_set_header_test() {
         let mut http = new_response(
-        IndexMap::from([
-            ("server".to_string(),"not-jequi".to_string())
-        ]),
-        0,
-        String::new(),
-        &mut []);
+            IndexMap::from([("server".to_string(), "not-jequi".to_string())]),
+            0,
+            String::new(),
+            &mut [],
+        );
 
-        http.response.set_header("server","jequi");
+        http.response.set_header("server", "jequi");
         let server = http.response.get_header("server");
-        assert_eq!(Some(&"jequi".to_string()),server);
+        assert_eq!(Some(&"jequi".to_string()), server);
 
-        http.response.set_header("Content-Length","40");
+        http.response.set_header("Content-Length", "40");
         let server = http.response.get_header("content-length");
-        assert_eq!(Some(&"40".to_string()),server);
+        assert_eq!(Some(&"40".to_string()), server);
     }
 
     #[test]
     fn test_write_body() {
         let stream = Cursor::new(Vec::new());
-        let mut body_buffer = [0;1024];
-        let mut http = HttpConn::new(RawStream::Normal(stream), &mut [0;0], &mut body_buffer);
+        let mut body_buffer = [0; 1024];
+        let mut http = HttpConn::new(RawStream::Normal(stream), &mut [0; 0], &mut body_buffer);
         let resp = &mut http.response;
         resp.write_body(b"hello").unwrap();
-        assert_eq!(b"hello",&resp.body_buffer[..resp.body_length]);
+        assert_eq!(b"hello", &resp.body_buffer[..resp.body_length]);
         resp.write_body(b" world").unwrap();
-        assert_eq!(b"hello world",&resp.body_buffer[..resp.body_length]);
+        assert_eq!(b"hello world", &resp.body_buffer[..resp.body_length]);
     }
 }
