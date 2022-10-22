@@ -1,14 +1,15 @@
 use std::{
     cmp,
-    io::{Error, ErrorKind, Read, Result, Write},
+    io::{Error, ErrorKind, Result},
 };
 
 use crate::{HttpConn, Response};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-impl<'a, T: Read + Write> HttpConn<'a, T> {
-    pub fn write_response(&mut self) -> Result<()> {
+impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
+    pub async fn write_response(&mut self) -> Result<()> {
         let status_line = format!("{} {}\n", self.version, self.response.status);
-        self.raw.stream.write(status_line.as_bytes()).unwrap();
+        self.raw.stream.write(status_line.as_bytes()).await.unwrap();
         let content_length = self.response.body_length;
         if content_length > 0 {
             self.response
@@ -16,13 +17,14 @@ impl<'a, T: Read + Write> HttpConn<'a, T> {
         }
         for (key, value) in &self.response.headers {
             let header = format!("{}: {}\n", key, value);
-            self.raw.stream.write(header.as_bytes()).unwrap();
+            self.raw.stream.write(header.as_bytes()).await.unwrap();
         }
-        self.raw.stream.write(b"\n").unwrap();
+        self.raw.stream.write(b"\n").await.unwrap();
         if content_length > 0 {
             self.raw
                 .stream
                 .write(&self.response.body_buffer[..content_length])
+                .await
                 .unwrap();
         }
         Ok(())
@@ -58,9 +60,11 @@ impl<'a> Response<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Read};
+    use std::io::Cursor;
 
     use indexmap::IndexMap;
+
+    use tokio::io::AsyncReadExt;
 
     use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
 
@@ -94,8 +98,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn response_write_test() {
+    #[tokio::test]
+    async fn response_write_test() {
         let mut bodies = (
             Vec::from("hello world"),
             Vec::from("test2 2 2 2 2"),
@@ -162,14 +166,14 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ",
         ];
         for (i, mut r) in responses_in.into_iter().enumerate() {
-            r.write_response().unwrap();
+            r.write_response().await.unwrap();
 
             let buf = &mut [0; 1024];
             let mut n = 0;
             if let RawStream::Normal(mut stream) = r.raw.stream {
                 stream.set_position(0);
 
-                n = stream.read(buf).unwrap();
+                n = stream.read(buf).await.unwrap();
             }
 
             assert_eq!(
@@ -197,11 +201,12 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         assert_eq!(Some(&"40".to_string()), server);
     }
 
-    #[test]
-    fn test_write_body() {
+    #[tokio::test]
+    async fn test_write_body() {
         let stream = Cursor::new(Vec::new());
         let mut body_buffer = [0; 1024];
-        let mut http = HttpConn::new(RawStream::Normal(stream), &mut [0; 0], &mut body_buffer);
+        let mut http =
+            HttpConn::new(RawStream::Normal(stream), &mut [0; 0], &mut body_buffer).await;
         let resp = &mut http.response;
         resp.write_body(b"hello").unwrap();
         assert_eq!(b"hello", &resp.body_buffer[..resp.body_length]);

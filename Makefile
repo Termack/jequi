@@ -13,11 +13,7 @@ go_setup:
 	&& go mod tidy
 
 static: clear go_setup
-	cargo build --lib
 	cd ./go/jequi && go build -buildmode=c-archive -o $(LIB_DIR)/lib$(LIB_NAME).a
-	LIB_TYPE=static cargo build --bin jequi
 
-dynamic: clear go_setup
-	cargo build --lib
+dylib: clear go_setup
 	cd ./go/jequi && go build -o $(LIB_DIR)/lib$(LIB_NAME).so -buildmode=c-shared
-	LIB_TYPE=dynamic cargo run --bin jequi

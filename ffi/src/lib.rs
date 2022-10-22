@@ -1,4 +1,4 @@
-use crate::Response;
+use jequi::Response;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
