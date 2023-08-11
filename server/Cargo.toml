@@ -10,7 +10,7 @@ name = "server"
 path = "src/bin/jequi.rs"
 
 [build-dependencies]
-ffi = { path = "../ffi" }
+api = { path = "../api" }
 
 [dependencies]
 

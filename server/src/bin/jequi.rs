@@ -1,6 +1,6 @@
 use tokio::net::{TcpListener, TcpStream};
 
-use jequi::{HttpConn, RawStream, Response};
+use jequi::{HttpConn, RawStream, Response, Config};
 
 use chrono::Utc;
 
@@ -46,7 +46,10 @@ async fn handle_connection(stream: TcpStream) {
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
+    let config: Config = Config::load_config("./example/conf.yaml");
+    let address = (config.ip,config.port);
+
+    let listener = TcpListener::bind(address).await.unwrap();
 
     loop {
         let (stream, _) = listener.accept().await.unwrap();

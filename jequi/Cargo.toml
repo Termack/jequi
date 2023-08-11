@@ -10,7 +10,8 @@ name = "jequi"
 crate-type = ["lib"]
 
 [dependencies]
-
+serde_yaml = "0.9.25"
+serde = {version = "1.0.183",features = ["derive"] }
 openssl = "0.10.41"
 indexmap = "1.9.1"
 tokio = { version = "1", features = ["full"] }

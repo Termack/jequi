@@ -17,3 +17,6 @@ static: clear go_setup
 
 dylib: clear go_setup
 	cd ./go/jequi && go build -o $(LIB_DIR)/lib$(LIB_NAME).so -buildmode=c-shared
+
+run: dylib
+	cargo run
