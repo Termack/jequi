@@ -11,10 +11,12 @@ use tokio_openssl::SslStream;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
+#[serde(default,deny_unknown_fields)]
 pub struct Config {
     pub ip: String,
     pub port: u16,
     pub static_files_path: Option<String>,
+    pub tls_active: bool
 }
 
 pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {

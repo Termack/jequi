@@ -143,7 +143,10 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                         Err(Error::new(ErrorKind::InvalidData, "Malformed header")),
                     );
                 }
-                if let Some(next) = buffer.get(i + 1) {
+                if let Some(mut next) = buffer.get(i + 1) {
+                    if *next == b'\r' {
+                        next = buffer.get(i + 2).unwrap_or(next);
+                    }
                     if *next == b'\n' {
                         stop = true;
                         break;
@@ -158,7 +161,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         let mut buf: &[u8] = &[];
 
         if let Some(index) = line_start {
-            buf = &buffer[index..buffer.len()]
+            buf = &buffer[index..buffer.len()];
         }
 
         let mut res = Ok(());
@@ -318,10 +321,10 @@ Content-Type: application/json
             ),
             Vec::from(
                 "\
-POST /bla HTTP/2.0
-User-Agent: Mozilla
-Accept-Encoding: gzip
-
+POST /bla HTTP/2.0\r
+User-Agent: Mozilla\r
+Accept-Encoding: gzip\r
+\r
 ",
             ),
             Vec::from(

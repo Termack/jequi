@@ -8,8 +8,9 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
     pub async fn write_response(&mut self) -> Result<()> {
+        let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);
-        self.raw.stream.write(status_line.as_bytes()).await.unwrap();
+        headers += &status_line;
         let content_length = self.response.body_length;
         if content_length > 0 {
             self.response
@@ -17,9 +18,10 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         }
         for (key, value) in &self.response.headers {
             let header = format!("{}: {}\n", key, value);
-            self.raw.stream.write(header.as_bytes()).await.unwrap();
+            headers += &header;
         }
-        self.raw.stream.write(b"\n").await.unwrap();
+        headers += "\n";
+        self.raw.stream.write(headers.as_bytes()).await.unwrap();
         if content_length > 0 {
             self.raw
                 .stream

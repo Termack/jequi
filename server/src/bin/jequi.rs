@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tokio::net::{TcpListener, TcpStream};
 
 use jequi::{HttpConn, RawStream, Response, Config};
@@ -9,13 +11,16 @@ extern "C" {
     fn HandleResponse(resp: *mut Response);
 }
 
-async fn handle_connection(stream: TcpStream) {
+async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
     let mut read_buffer = [0; 1024];
     let mut body_buffer = [0; 1024];
-    let tls_active = true;
     let mut http;
-    if tls_active {
-        http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer).await;
+    if config.tls_active {
+        http = HttpConn::ssl_new(
+            stream,
+            &mut read_buffer,
+            &mut body_buffer)
+            .await;
     } else {
         http = HttpConn::new(
             RawStream::Normal(stream),
@@ -26,6 +31,8 @@ async fn handle_connection(stream: TcpStream) {
     }
 
     http.parse_first_line().await.unwrap();
+
+    http.parse_headers().await.unwrap();
 
     http.response.set_header("server", "jequi");
     http.response.set_header(
@@ -46,16 +53,17 @@ async fn handle_connection(stream: TcpStream) {
 
 #[tokio::main]
 async fn main() {
-    let config: Config = Config::load_config("./example/conf.yaml");
-    let address = (config.ip,config.port);
+    let config = Arc::new(Config::load_config("./example/conf.yaml"));
+
+    let address = (config.ip.clone(),config.port.clone());
 
     let listener = TcpListener::bind(address).await.unwrap();
 
     loop {
         let (stream, _) = listener.accept().await.unwrap();
-
+        let conf = Arc::clone(&config);
         tokio::spawn(async move {
-            handle_connection(stream).await;
+            handle_connection(conf,stream).await;
         });
     }
 }

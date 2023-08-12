@@ -15,8 +15,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for RawStream<S> {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<Result<()>> {
         match *self {
-            RawStream::Ssl(ref mut s) => Pin::new(s).poll_read(cx, buf),
-            RawStream::Normal(ref mut s) => Pin::new(s).poll_read(cx, buf),
+            RawStream::Ssl(ref mut stream) => Pin::new(stream).poll_read(cx, buf),
+            RawStream::Normal(ref mut stream) => Pin::new(stream).poll_read(cx, buf),
         }
     }
 }
