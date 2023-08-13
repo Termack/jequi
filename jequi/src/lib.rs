@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 use tokio_openssl::SslStream;
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 #[serde(default,deny_unknown_fields)]
 pub struct Config {
     pub ip: String,

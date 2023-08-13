@@ -434,6 +434,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 
 [[package]]
+name = "plugins"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "chrono",
+ "jequi",
+ "tokio",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -518,6 +528,7 @@ dependencies = [
  "api",
  "chrono",
  "jequi",
+ "plugins",
  "tokio",
 ]
 

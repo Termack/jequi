@@ -2,14 +2,11 @@ use std::sync::Arc;
 
 use tokio::net::{TcpListener, TcpStream};
 
-use jequi::{HttpConn, RawStream, Response, Config};
+use jequi::{HttpConn, RawStream, Config};
+
+use plugins;
 
 use chrono::Utc;
-
-#[link(name = "jequi_go")]
-extern "C" {
-    fn HandleResponse(resp: *mut Response);
-}
 
 async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
     let mut read_buffer = [0; 1024];
@@ -39,10 +36,18 @@ async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
         "date",
         &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
     );
-    http.response.status = 200;
-    http.response.write_body(b"hello world\n").unwrap();
 
-    unsafe { HandleResponse(&mut http.response) };
+    if let Some(path) = &config.static_files_path {
+        plugins::handle_static_files(&mut http,path)
+    }
+
+    unsafe { plugins::HandleResponse(&mut http.response) };
+
+    if http.response.status == 0 {
+        http.response.status = 200;
+        http.response.write_body(b"hello world\n").unwrap();
+    }
+
     http.write_response().await.unwrap();
 
     println!(

@@ -35,3 +35,24 @@ impl Config {
         config
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::Config;
+
+    static CONF_TEST_PATH: &str = "test/test.conf";
+
+    #[test]
+    fn load_config_test() {
+        let config = Config::load_config(CONF_TEST_PATH);
+
+        let mut test_config = Config::default();
+        test_config.tls_active = true;
+        test_config.static_files_path = Some("./".to_string());
+
+        assert_eq!(
+            config,
+            test_config
+        )
+    }
+}
