@@ -1,3 +1,2 @@
-ip: "127.0.0.1"
 tls_active: true
-static_files_path: "./"
+static_files_path: "example/site/"

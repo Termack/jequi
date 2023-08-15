@@ -12,10 +12,8 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         let status_line = format!("{} {}\n", self.version, self.response.status);
         headers += &status_line;
         let content_length = self.response.body_length;
-        if content_length > 0 {
-            self.response
-                .set_header("content-length", &content_length.to_string());
-        }
+        self.response
+            .set_header("content-length", &content_length.to_string());
         for (key, value) in &self.response.headers {
             let header = format!("{}: {}\n", key, value);
             headers += &header;
