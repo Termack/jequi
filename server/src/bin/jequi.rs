@@ -41,7 +41,7 @@ async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
         plugins::handle_static_files(&mut http,path)
     }
 
-    unsafe { plugins::HandleResponse(&mut http.response) };
+    plugins::go_handle_response(&mut http.response);
 
     if http.response.status == 0 {
         http.response.status = 200;
@@ -58,7 +58,7 @@ async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
 
 #[tokio::main]
 async fn main() {
-    let config = Arc::new(Config::load_config("./example/conf.yaml"));
+    let config = Arc::new(Config::load_config("./conf.yaml"));
 
     let address = (config.ip.clone(),config.port.clone());
 

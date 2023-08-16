@@ -12,11 +12,11 @@ go_setup:
 	&& go mod edit -replace github.com/handle=../handle \
 	&& go mod tidy
 
-static: clear go_setup
-	cd ./go/jequi && go build -buildmode=c-archive -o $(LIB_DIR)/lib$(LIB_NAME).a
+go: clear go_setup
+	cd ./go/jequi && go build -o $(LIB_DIR)/$(LIB_NAME).so -buildmode=c-shared
 
-dylib: clear go_setup
-	cd ./go/jequi && go build -o $(LIB_DIR)/lib$(LIB_NAME).so -buildmode=c-shared
-
-run: dylib
+run: go
 	cargo run
+
+example_static_files:
+	cd example/static_files && cargo run -- -C ../../

@@ -1,0 +1,2 @@
+tls_active: true
+static_files_path: "site/"

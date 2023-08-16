@@ -2,15 +2,37 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use jequi::{HttpConn, Response};
 
+use libloading;
+
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use std::{
+    env,
     fs::File,
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
 };
 
-#[link(name = "jequi_go")]
-extern "C" {
-    pub fn HandleResponse(resp: *mut Response);
+pub fn go_handle_response(resp: *mut Response) {
+    println!("bla");
+    let mut original_lib_path = match env::var("LIB_DIR") {
+        Ok(dir) => dir,
+        Err(_) => "target/debug".to_string(),
+    };
+    original_lib_path = format!("{}/jequi_go.so", original_lib_path);
+    let milis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let new_file_path = format!("/tmp/jequi_go.{}.so", milis);
+    fs::copy(original_lib_path, &new_file_path).unwrap();
+    unsafe {
+        let lib = libloading::Library::new(new_file_path).unwrap();
+        let go_handle_response: libloading::Symbol<unsafe extern "C" fn(resp: *mut Response)> =
+            lib.get(b"HandleResponse\0").unwrap();
+        go_handle_response(resp);
+    }
 }
 
 pub fn handle_static_files<'a, T: AsyncRead + AsyncWrite + Unpin>(
@@ -70,7 +92,12 @@ mod tests {
 
     static TEST_PATH: &str = "test/";
 
-    use std::{io::Cursor, path::Path, fs::{File, self}, os::unix::prelude::PermissionsExt};
+    use std::{
+        fs::{self, File},
+        io::Cursor,
+        os::unix::prelude::PermissionsExt,
+        path::Path,
+    };
 
     use jequi::{HttpConn, RawStream};
 
@@ -108,7 +135,7 @@ mod tests {
         );
 
         // Forbidden test
-        let path = format!("{}noperm",TEST_PATH);
+        let path = format!("{}noperm", TEST_PATH);
         let path = Path::new(&path);
 
         if !path.exists() {

@@ -1,0 +1,10 @@
+Read request body
+Setup go path in config file
+CHECK MEMORY USAGE IMPACT BECAUSE OF RELOADING LIBS
+Api functions:
+ - read request body
+ - read request headers
+ - write response body
+Setup more examples:
+ - some css and js in static_files
+ - small api in go with sqlite
