@@ -18,5 +18,8 @@ go: clear go_setup
 run: go
 	cargo run
 
+reload:
+	kill -SIGHUP $(shell cat jequi.pid)
+
 example_static_files:
 	cd example/static_files && cargo run -- -C ../../

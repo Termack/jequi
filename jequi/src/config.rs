@@ -8,7 +8,9 @@ impl Clone for Config {
             ip: self.ip.clone(),
             port: self.port,
             static_files_path: self.static_files_path.clone(),
-            tls_active: self.tls_active
+            tls_active: self.tls_active,
+            go_handler_path: self.go_handler_path.clone(),
+            go_library_path: self.go_library_path.clone(),
         }
     }
 }
@@ -19,7 +21,9 @@ impl Default for Config {
             ip: String::from("127.0.0.1"),
             port: 7878,
             static_files_path: None,
-            tls_active: false
+            tls_active: false,
+            go_handler_path: None,
+            go_library_path: None
         }
     }
 }

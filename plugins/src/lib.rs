@@ -2,7 +2,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use jequi::{HttpConn, Response};
 
-use libloading;
+use libloading::{self, Library};
 
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,12 +14,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn go_handle_response(resp: *mut Response) {
-    println!("bla");
+pub fn load_go_lib(lib_path: &Option<String>) -> String {
+    if let Some(lib_path) = lib_path {
+        if Path::new(&lib_path).exists() {
+            fs::remove_file(lib_path).unwrap();
+        }
+    }
+
     let mut original_lib_path = match env::var("LIB_DIR") {
         Ok(dir) => dir,
         Err(_) => "target/debug".to_string(),
     };
+
     original_lib_path = format!("{}/jequi_go.so", original_lib_path);
     let milis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -28,7 +34,14 @@ pub fn go_handle_response(resp: *mut Response) {
     let new_file_path = format!("/tmp/jequi_go.{}.so", milis);
     fs::copy(original_lib_path, &new_file_path).unwrap();
     unsafe {
-        let lib = libloading::Library::new(new_file_path).unwrap();
+        Library::new(&new_file_path).unwrap();
+    }
+    return new_file_path;
+}
+
+pub fn go_handle_response(resp: *mut Response, path: &str) {
+    unsafe {
+        let lib = libloading::Library::new(path).unwrap();
         let go_handle_response: libloading::Symbol<unsafe extern "C" fn(resp: *mut Response)> =
             lib.get(b"HandleResponse\0").unwrap();
         go_handle_response(resp);

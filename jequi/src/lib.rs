@@ -16,7 +16,10 @@ pub struct Config {
     pub ip: String,
     pub port: u16,
     pub static_files_path: Option<String>,
-    pub tls_active: bool
+    pub tls_active: bool,
+    pub go_handler_path: Option<String>,
+    #[serde(skip)]
+    pub go_library_path: Option<String>
 }
 
 pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {

@@ -1,6 +1,6 @@
 Read request body
 Setup go path in config file
-CHECK MEMORY USAGE IMPACT BECAUSE OF RELOADING LIBS
+FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1)
 Api functions:
  - read request body
  - read request headers
@@ -8,3 +8,6 @@ Api functions:
 Setup more examples:
  - some css and js in static_files
  - small api in go with sqlite
+Better handling of config async 
+Implement some way of adding extra config without altering /jequi:
+ - maybe create a trait like "handler" that implements "run" and "reload" and then add variables to the config with a function in /jequi like "add_variable"

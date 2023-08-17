@@ -1,23 +1,26 @@
-use std::sync::Arc;
+use std::{sync::Arc, fs};
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    signal::unix::{signal, SignalKind},
+    spawn,
+    sync::RwLock,
+};
 
-use jequi::{HttpConn, RawStream, Config};
+use jequi::{Config, HttpConn, RawStream};
 
 use plugins;
 
 use chrono::Utc;
 
-async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
+use std::process;
+
+async fn handle_connection(config: Config, stream: TcpStream) {
     let mut read_buffer = [0; 1024];
     let mut body_buffer = [0; 1024];
     let mut http;
     if config.tls_active {
-        http = HttpConn::ssl_new(
-            stream,
-            &mut read_buffer,
-            &mut body_buffer)
-            .await;
+        http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer).await;
     } else {
         http = HttpConn::new(
             RawStream::Normal(stream),
@@ -38,10 +41,12 @@ async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
     );
 
     if let Some(path) = &config.static_files_path {
-        plugins::handle_static_files(&mut http,path)
+        plugins::handle_static_files(&mut http, path)
     }
 
-    plugins::go_handle_response(&mut http.response);
+    if let Some(lib_path) = &config.go_library_path {
+        plugins::go_handle_response(&mut http.response, lib_path);
+    }
 
     if http.response.status == 0 {
         http.response.status = 200;
@@ -56,19 +61,39 @@ async fn handle_connection(config: Arc<Config>,stream: TcpStream) {
     );
 }
 
+async fn listen_reload(config: Arc<RwLock<Config>>) {
+    let mut stream = signal(SignalKind::hangup()).unwrap();
+
+    // Print whenever a HUP signal is received
+    loop {
+        stream.recv().await;
+        println!("Reload");
+        let lib_path = &config.read().await.go_library_path.clone();
+        config.write().await.go_library_path = Some(plugins::load_go_lib(lib_path));
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let config = Arc::new(Config::load_config("./conf.yaml"));
+    fs::write("./jequi.pid",process::id().to_string()).unwrap();
 
-    let address = (config.ip.clone(),config.port.clone());
+    let mut config = Arc::new(RwLock::new(Config::load_config("./conf.yaml")));
+
+    {
+        config.write().await.go_library_path = Some(plugins::load_go_lib(&None));
+    }
+
+    let address = (config.read().await.ip.clone(), config.read().await.port);
+
+    spawn(listen_reload(Arc::clone(&mut config)));
 
     let listener = TcpListener::bind(address).await.unwrap();
 
     loop {
         let (stream, _) = listener.accept().await.unwrap();
-        let conf = Arc::clone(&config);
+        let conf = config.read().await.clone();
         tokio::spawn(async move {
-            handle_connection(conf,stream).await;
+            handle_connection(conf, stream).await;
         });
     }
 }
