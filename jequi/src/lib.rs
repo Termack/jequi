@@ -38,6 +38,7 @@ pub struct Request {
     pub method: String,
     pub uri: String,
     pub headers: IndexMap<String, String>,
+    pub body: String,
 }
 
 #[repr(C)]
