@@ -1,6 +1,6 @@
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use jequi::{HttpConn, Response};
+use jequi::{HttpConn, Request, Response};
 
 use libloading::{self, Library};
 
@@ -39,12 +39,13 @@ pub fn load_go_lib(lib_path: &Option<String>) -> String {
     return new_file_path;
 }
 
-pub fn go_handle_response(resp: *mut Response, path: &str) {
+pub fn go_handle_request(req: *mut Request, resp: *mut Response, path: &str) {
     unsafe {
         let lib = libloading::Library::new(path).unwrap();
-        let go_handle_response: libloading::Symbol<unsafe extern "C" fn(resp: *mut Response)> =
-            lib.get(b"HandleResponse\0").unwrap();
-        go_handle_response(resp);
+        let go_handle_response: libloading::Symbol<
+            unsafe extern "C" fn(req: *mut Request, resp: *mut Response),
+        > = lib.get(b"HandleRequest\0").unwrap();
+        go_handle_response(req, resp);
     }
 }
 

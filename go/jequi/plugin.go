@@ -7,6 +7,6 @@ import (
 	"github.com/jequi_go"
 )
 
-func handleResponse(r jequi_go.Response) {
-	handler.HandleResponse(r)
+func handleRequest(req jequi_go.Request, resp jequi_go.Response) {
+	handler.HandleRequest(req, resp)
 }

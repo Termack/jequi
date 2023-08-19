@@ -22,8 +22,8 @@ func genImports(file, pack, module string) {
 	outs += ")\n"
 
 	outs += `
-func handleResponse(r jequi_go.Response){
-	handler.HandleResponse(r)
+func handleRequest(req jequi_go.Request,resp jequi_go.Response){
+	handler.HandleRequest(req,resp)
 }
 	`
 

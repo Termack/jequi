@@ -9,10 +9,11 @@ import (
 	"github.com/jequi_go"
 )
 
-//export HandleResponse
-func HandleResponse(resp unsafe.Pointer) {
-	r := jequi_go.NewResponse(resp)
-	handleResponse(r)
+//export HandleRequest
+func HandleRequest(req_pointer unsafe.Pointer, resp_pointer unsafe.Pointer) {
+	req := jequi_go.NewRequest(req_pointer)
+	resp := jequi_go.NewResponse(resp_pointer)
+	handleRequest(req, resp)
 }
 
 func main() {}

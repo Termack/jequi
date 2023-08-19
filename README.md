@@ -13,4 +13,4 @@ Flexible web server written in rust that allows dynamic configuration extended b
 
 `make run` and then `curl https://127.0.0.1:7878 -k` to test it
 
-you can play with `/go/handle` to see the go code being executed by jequi
+To test jequi with the go api run `make run` then mess with the file `go/handle/main.go` and in another terminal run `make go && make reload` and then `curl https://127.0.0.1:7878 -k` to test it

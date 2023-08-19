@@ -1,6 +1,7 @@
 Read request body
 Setup go path in config file
 FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1)
+Implement tests on functionality that was added that is not being tested
 Api functions:
  - read request body
  - read request headers

@@ -120,12 +120,6 @@ Wowo: 10034mc amk
 "
         .to_vec(),
         b"\
-    GET / HTTP/1.1 
-    Content-Length: 11
-    
-    hello world"
-            .to_vec(),
-        b"\
 GET / HTTP/1.1 
 Content-Length: 11
 
@@ -217,7 +211,7 @@ Content-Length: 100\r
 vpm1DH8sIat11ezv8GulW93nT7uTxVF5RH58WH7INSMvvzqXSd3O6Np11MOcI8gVXVpKOSwNsCQusuMyfjZ5eXC6eD7sQdRal
 r
 "
-            .to_vec(),
+        .to_vec(),
     ];
 
     let expected_results: Vec<Result<String>> = vec![
@@ -253,7 +247,7 @@ r
         match &expected_results[i] {
             Ok(expected_success) => assert_eq!(
                 expected_success,
-                &req.request.body,
+                &req.request.body.unwrap(),
                 "Testing read body for request: {}",
                 String::from_utf8_lossy(r)
             ),

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::{Error, ErrorKind, Result};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 
-use crate::HttpConn;
+use crate::{HttpConn, Request};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
     pub async fn parse_first_line(&mut self) -> Result<()> {
@@ -234,13 +234,12 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
     pub async fn read_body(&mut self) -> Result<()> {
         let content_length: usize = self
             .request
-            .headers
-            .get("content-length")
-            .ok_or(Error::new(ErrorKind::InvalidData, "No content length"))?
+            .get_header("Content-Length")
+            .ok_or(Error::new(ErrorKind::NotFound, "No content length"))?
             .parse()
             .map_err(|err| {
                 Error::new(
-                    ErrorKind::Other,
+                    ErrorKind::InvalidData,
                     format!("Cant convert content length to int: {}", err),
                 )
             })?;
@@ -254,7 +253,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
             }
             body.extend_from_slice(&self.raw.buffer[start..end]);
             if body.len() == content_length {
-                self.request.body = String::from_utf8_lossy(&body).into_owned();
+                self.request.body = Some(String::from_utf8_lossy(&body).into_owned());
                 return Ok(());
             }
         }
@@ -277,7 +276,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                     }
                     body.extend_from_slice(&self.raw.buffer[start..end]);
                     if body.len() == content_length {
-                        self.request.body = String::from_utf8_lossy(&body).into_owned();
+                        self.request.body = Some(String::from_utf8_lossy(&body).into_owned());
                         return Ok(());
                     }
                 }
@@ -285,6 +284,16 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                 Err(e) => panic!("{:?}", e),
             }
         }
+    }
+}
+
+impl<'a> Request {
+    pub fn get_header(&self, header: &str) -> Option<&String> {
+        self.headers.get(&header.to_string().trim().to_lowercase())
+    }
+
+    pub fn get_body(&self) -> Option<&String> {
+        self.body.as_ref()
     }
 }
 

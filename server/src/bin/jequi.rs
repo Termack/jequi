@@ -1,4 +1,4 @@
-use std::{sync::Arc, fs};
+use std::{sync::Arc, fs, io::ErrorKind};
 
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -34,6 +34,13 @@ async fn handle_connection(config: Config, stream: TcpStream) {
 
     http.parse_headers().await.unwrap();
 
+    // TODO: Read the body only if needed
+    match http.read_body().await {
+        Ok(_)=>(),
+        Err(ref e) if e.kind() == ErrorKind::NotFound => (),
+        Err(e) => panic!("Error reading request body: {}",e)
+    };
+
     http.response.set_header("server", "jequi");
     http.response.set_header(
         "date",
@@ -45,20 +52,14 @@ async fn handle_connection(config: Config, stream: TcpStream) {
     }
 
     if let Some(lib_path) = &config.go_library_path {
-        plugins::go_handle_response(&mut http.response, lib_path);
+        plugins::go_handle_request(&mut http.request,&mut http.response, lib_path);
     }
 
     if http.response.status == 0 {
         http.response.status = 200;
-        http.response.write_body(b"hello world\n").unwrap();
     }
 
     http.write_response().await.unwrap();
-
-    println!(
-        "method:{} uri:{} version:{}",
-        http.request.method, http.request.uri, http.version
-    );
 }
 
 async fn listen_reload(config: Arc<RwLock<Config>>) {
