@@ -1,25 +1,58 @@
 #![feature(io_error_more)]
+pub mod config;
 pub mod request;
 pub mod response;
 pub mod ssl;
-pub mod config;
 pub mod tcp_stream;
 
-use tokio::io::{AsyncRead, AsyncWrite};
-use indexmap::IndexMap;
-use tokio_openssl::SslStream;
-use serde::Deserialize;
+use std::{any::Any, collections::HashMap, sync::Arc};
 
-#[derive(Deserialize, Debug, PartialEq)]
-#[serde(default,deny_unknown_fields)]
+use dyn_clone::DynClone;
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_openssl::SslStream;
+
+pub struct Plugin {
+    pub config: Box<dyn JequiConfig>,
+    pub request_handler: Box<dyn RequestHandler>
+}
+
+impl Plugin {
+    pub const fn new(config: Box<dyn JequiConfig>,request_handler: Box<dyn RequestHandler>) -> Self {
+        Plugin { config,request_handler }
+    }
+}
+
+pub type ConfigMap = HashMap<String, Value>;
+
+#[derive(Clone, Default)]
+pub struct MainConf {
+    pub config_map: ConfigMap,
+    pub request_handlers: Vec<Box<dyn RequestHandler>>,
+}
+
+pub trait RequestHandler: DynClone + Send + Sync
+{
+    fn handle_request(&self, req: &mut Request, resp: &mut Response);
+}
+dyn_clone::clone_trait_object!(RequestHandler);
+
+pub trait JequiConfig: Any + DynClone +  Send + Sync
+{
+    fn load(config: &mut ConfigMap, handlers: &mut Vec<Arc<dyn RequestHandler>>) -> Option<Arc<Self>> where Self: Sized;
+    fn as_any(&self) -> &dyn Any;
+}
+dyn_clone::clone_trait_object!(JequiConfig);
+
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(default)]
 pub struct Config {
     pub ip: String,
     pub port: u16,
-    pub static_files_path: Option<String>,
     pub tls_active: bool,
-    pub go_handler_path: Option<String>,
-    #[serde(skip)]
-    pub go_library_path: Option<String>
 }
 
 pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {

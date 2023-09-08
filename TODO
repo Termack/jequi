@@ -1,10 +1,9 @@
-Implement some way of adding extra config without altering /jequi:
- - maybe create a trait like "handler" that implements "run" and "reload" and then add variables to the config with a function in /jequi like "add_variable"
- - https://serde.rs/impl-deserialize.html
-Better handling of config async 
-Setup go path in config file
-FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1)
+Organize code (delete unused structs, fix warnings, add tests, some other things that i probably forgot)
+FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1) (dlclose does not unload library from memory)
+Implement granular config for uri and hosts
 Implement tests on functionality that was added that is not being tested
 Setup more examples:
  - some css and js in static_files
  - small api in go with sqlite
+HTTP2
+MAYBE: load plugins in runtime using https://crates.io/crates/abi_stable

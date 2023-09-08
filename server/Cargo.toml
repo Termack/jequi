@@ -13,6 +13,7 @@ path = "src/bin/jequi.rs"
 api = { path = "../api" }
 
 [dependencies]
+indexmap = "1.9.1"
 plugins = { path = "../plugins" }
 jequi = { path = "../jequi" }
 tokio = { version = "1", features = ["full"] }

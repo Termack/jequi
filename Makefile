@@ -25,7 +25,3 @@ reload:
 example_static_files:
 	cd example/static_files && cargo run -- -C ../../
 
-example_go_api:
-	$(eval HANDLER_PATH=`pwd`/handle)
-	@make go
-

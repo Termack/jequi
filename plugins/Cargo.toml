@@ -14,5 +14,7 @@ api = { path = "../api" }
 
 [dependencies]
 jequi = { path = "../jequi" }
-libloading = "0.8.0"
-tokio = { version = "1", features = ["full"] }
+indexmap = "1.9.1"
+
+jequi_go = { path = "jequi_go" }
+jequi_serve_static = { path = "jequi_serve_static" }
