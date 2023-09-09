@@ -1,7 +1,6 @@
-Organize code (delete unused structs, fix warnings, add tests, some other things that i probably forgot)
-FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1) (dlclose does not unload library from memory)
 Implement granular config for uri and hosts
-Implement tests on functionality that was added that is not being tested
+FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1) (dlclose does not unload library from memory)
+Add tests to jequi_go and server
 Setup more examples:
  - some css and js in static_files
  - small api in go with sqlite

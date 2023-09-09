@@ -1,9 +1,8 @@
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{any::Any, sync::Arc};
 
-use serde_yaml::{self, from_reader, Value};
-use serde_yaml::from_value;
+use serde_yaml::{from_reader, from_value};
 
-use crate::{Config, ConfigMap, JequiConfig, MainConf, RequestHandler};
+use crate::{Config, ConfigMap, JequiConfig, RequestHandler};
 
 impl Default for Config {
     fn default() -> Self {
@@ -40,22 +39,20 @@ pub fn load_config(filename: &str) -> ConfigMap {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, MainConf};
+    use crate::{Config, config::load_config, JequiConfig};
 
     static CONF_TEST_PATH: &str = "test/test.conf";
 
     #[test]
     fn load_config_test() {
-        let mut main_config = MainConf::default();
-        main_config.load_config(CONF_TEST_PATH);
+        let mut main_conf = load_config(CONF_TEST_PATH);
 
-        let conf = main_config.config_map.get("main").unwrap().to_owned();
-        let conf = conf.as_any().downcast_ref::<Config>().unwrap().clone();
+        let conf = Config::load(&mut main_conf, &mut Vec::new()).unwrap();
 
         let mut test_config = Config::default();
         test_config.tls_active = true;
         test_config.ip = "1.2.3.4".to_owned();
 
-        assert_eq!(conf, test_config)
+        assert_eq!(*conf, test_config)
     }
 }

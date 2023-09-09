@@ -1,12 +1,11 @@
 use jequi::{JequiConfig, Request, RequestHandler, Response, ConfigMap};
-use serde_yaml::Value;
 use serde_yaml::from_value;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use std::{
     fs::File,
     io::{ErrorKind, Read},
-    path::{Path, PathBuf}, collections::HashMap, any::Any, sync::Arc,
+    path::{Path, PathBuf}, any::Any, sync::Arc,
 };
 
 pub fn name() -> String {
