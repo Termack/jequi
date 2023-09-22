@@ -1,34 +1,44 @@
-use jequi::{JequiConfig, Request, RequestHandler, Response, ConfigMap};
-use serde_yaml::from_value;
+use jequi::{JequiConfig, Request, RequestHandler, Response, Plugin};
+use serde_yaml::Value;
 use serde::Deserialize;
 
 use std::{
     fs::File,
     io::{ErrorKind, Read},
-    path::{Path, PathBuf}, any::Any, sync::Arc,
+    path::{Path, PathBuf}, any::Any, sync::Arc, 
 };
 
 pub fn name() -> String {
     "serve_static_files".to_owned()
 }
 
-#[derive(Deserialize, Clone, Default)]
+pub fn load_plugin(config: &Value) -> Option<Plugin> {
+    let config = Arc::new(Config::load(config)?);
+    Some(Plugin {
+        config: config.clone(),
+        request_handler: Some(config.clone()),
+    })
+}
+
+#[derive(Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct Config {
-    pub path: Option<String>,
+    pub static_files_path: Option<String>,
 }
 
 impl Config {
     pub const fn new() -> Self {
-        Config { path: None }
+        Config { static_files_path: None }
     }
 }
 
 impl JequiConfig for Config {
-    fn load(config: &mut ConfigMap, handlers: &mut Vec<Arc<dyn RequestHandler>>) -> Option<Arc<Self>> where Self: Sized {
-        let conf: Config = from_value(config.remove(&name())?).unwrap();
-        let new_conf = Arc::new(conf);
-        handlers.push(new_conf.clone());
-        Some(new_conf)
+    fn load(config: &Value) -> Option<Self> where Self: Sized {
+        let conf: Config = Deserialize::deserialize(config).unwrap();
+        if conf == Config::default() {
+            return None;
+        }
+
+        Some(conf)
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -37,7 +47,7 @@ impl JequiConfig for Config {
 
 impl RequestHandler for Config {
     fn handle_request(&self, req: &mut Request, resp: &mut Response) {
-        let root = Path::new(self.path.as_ref().unwrap());
+        let root = Path::new(self.static_files_path.as_ref().unwrap());
 
         if !root.exists() {
             resp.status = 404;
@@ -116,7 +126,7 @@ mod tests {
         http.request.uri = "/file".to_string();
 
         let mut conf = Config::default();
-        conf.path = Some(TEST_PATH.to_owned());
+        conf.static_files_path = Some(TEST_PATH.to_owned());
 
         conf.handle_request(&mut http.request, &mut http.response);
 

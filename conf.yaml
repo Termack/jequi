@@ -1,4 +1,13 @@
-main:
-  tls_active: true
-jequi_go:
-  handler_path: "todo" 
+tls_active: true
+static_files_path: "test/"
+host:
+  jequi.com:
+    uri:
+      /api:
+        go_handler_path: "todo"
+      /app:
+        static_files_path: "test/host/uri/"
+    static_files_path: "test/host/"
+uri:
+  /api/v2:
+    go_handler_path: "todo"

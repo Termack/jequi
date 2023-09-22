@@ -1,8 +1,12 @@
-Implement granular config for uri and hosts
+Organize granular config code (add tests, move functions from server to some other place)
+Make static files plugin get files relative from the path in config
+Go plugin get path and function from config
 FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1) (dlclose does not unload library from memory)
 Add tests to jequi_go and server
 Setup more examples:
  - some css and js in static_files
  - small api in go with sqlite
-HTTP2
+Add proxy plugin
+HTTP2 and some other things in http1 (like keepalive)
 MAYBE: load plugins in runtime using https://crates.io/crates/abi_stable
+Proc macro to create a struct for configuration from plugin configs

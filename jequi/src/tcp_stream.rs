@@ -84,6 +84,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                 method: String::new(),
                 uri: String::new(),
                 headers: IndexMap::new(),
+                host: None,
                 body: None,
             },
             response: Response {

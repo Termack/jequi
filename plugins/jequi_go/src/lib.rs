@@ -1,32 +1,49 @@
-use jequi::{JequiConfig, Request, RequestHandler, Response, ConfigMap};
+use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
 use libloading::{self, Library};
-use std::any::Any;
 use serde::Deserialize;
+use serde_yaml::Value;
+use std::any::Any;
 use std::fs;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde_yaml::from_value;
 use std::{env, path::Path};
 
 pub fn name() -> String {
     "jequi_go".to_owned()
 }
 
-#[derive(Deserialize,Clone, Default)]
+pub fn load_plugin(config: &Value) -> Option<Plugin> {
+    let config = Arc::new(Config::load(config)?);
+    Some(Plugin {
+        config: config.clone(),
+        request_handler: Some(config.clone()),
+    })
+}
+
+#[derive(Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct Config {
-    pub handler_path: Option<String>,
+    pub go_handler_path: Option<String>,
     library_path: Option<String>,
 }
 
 impl Config {
     pub const fn new() -> Self {
-        Config { handler_path: None, library_path: None }
+        Config {
+            go_handler_path: None,
+            library_path: None,
+        }
     }
 }
 
 impl JequiConfig for Config {
-    fn load(config: &mut ConfigMap, handlers: &mut Vec<Arc<dyn RequestHandler>>) -> Option<Arc<Self>> where Self: Sized {
-        let mut conf: Config = from_value(config.remove(&name())?).unwrap();
+    fn load(config: &Value) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        let mut conf: Config = Deserialize::deserialize(config).unwrap();
+        if conf == Config::default() {
+            return None;
+        }
 
         if let Some(lib_path) = conf.library_path.as_ref() {
             if Path::new(&lib_path).exists() {
@@ -50,9 +67,7 @@ impl JequiConfig for Config {
             Library::new(&new_file_path).unwrap();
         }
         conf.library_path = Some(new_file_path);
-        let new_conf = Arc::new(conf);
-        handlers.push(new_conf.clone());
-        Some(new_conf)
+        Some(conf)
     }
     fn as_any(&self) -> &dyn Any {
         self

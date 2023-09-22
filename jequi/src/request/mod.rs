@@ -132,10 +132,14 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                     if value_start != i {
                         value = &buffer[value_start..value_end];
                     }
-                    let value = String::from_utf8_lossy(value).to_string();
+                    let value = String::from_utf8_lossy(value).trim().to_string();
+                    let header = header.trim().to_lowercase(); 
+                    if header == "host" {
+                        self.request.host = Some(value.clone());
+                    }
                     self.request
                         .headers
-                        .insert(header.trim().to_lowercase(), value.trim().to_string());
+                        .insert(header, value);
                 } else {
                     return (
                         true,

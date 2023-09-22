@@ -13,4 +13,16 @@ Flexible web server written in rust that allows dynamic configuration extended b
 
 `make run` and then `curl https://127.0.0.1:7878 -k` to test it
 
-To test jequi with the go api run `make run` then mess with the file `go/handle/main.go` and in another terminal run `make go && make reload` and then `curl https://127.0.0.1:7878 -k` to test it
+To test jequi with the go api run `make run` then mess with the file `go/handle/main.go` and in another terminal run `make go && make reload` and then `curl https://127.0.0.1:7878/api -k -H "Host: jequi.com"` to test it
+
+
+Requests to test:
+
+```
+curl https://127.0.0.1:7878/ -k
+curl https://127.0.0.1:7878/api -k
+curl https://127.0.0.1:7878/ -k -H "Host: jequi.com"
+curl https://127.0.0.1:7878/app -k -H "Host: jequi.com"
+curl https://127.0.0.1:7878/api -k -H "Host: jequi.com"
+curl https://127.0.0.1:7878/api/v2 -k
+```

@@ -88,6 +88,7 @@ mod tests {
                 method: String::new(),
                 uri: String::new(),
                 headers: IndexMap::new(),
+                host: None,
                 body: None,
             },
             response: Response {

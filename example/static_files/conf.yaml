@@ -1,4 +1,2 @@
-main:
-  tls_active: true
-serve_static_files:
-  path: "site/"
+tls_active: true
+static_files_path: "site/"
