@@ -1,4 +1,6 @@
+#![feature(let_chains)]
 #![feature(io_error_more)]
+#![feature(option_get_or_insert_default)]
 pub mod config;
 pub mod request;
 pub mod response;

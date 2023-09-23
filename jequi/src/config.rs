@@ -1,9 +1,9 @@
-use std::{any::Any, sync::Arc};
+use std::{any::Any, sync::Arc, collections::HashMap};
 
 use serde::Deserialize;
 use serde_yaml::from_reader;
 
-use crate::{Config, JequiConfig, Value, ConfigMapParser, Plugin};
+use crate::{Config, JequiConfig, Value, ConfigMapParser, Plugin, ConfigMap, HostConfig};
 
 pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
@@ -37,6 +37,107 @@ impl JequiConfig for Config {
     }
 }
 
+fn merge_yaml(a: &mut Value, b: Value) {
+    match (a, b) {
+        (Value::Mapping(ref mut a), Value::Mapping(b)) => {
+            for (k, v) in b {
+                if let Some(b_seq) = v.as_sequence()
+                && let Some(a_val) = a.get(&k)
+                && let Some(a_seq) = a_val.as_sequence()
+            {
+                a[&k] = [a_seq.as_slice(), b_seq.as_slice()].concat().into();
+                continue;
+            }
+
+                if !a.contains_key(&k) {
+                    a.insert(k, v);
+                } else {
+                    merge_yaml(&mut a[&k], v);
+                }
+            }
+        }
+        (a, b) => *a = b,
+    }
+}
+
+impl ConfigMap {
+    pub fn load(path: &str,load_plugins: fn(&Value) -> Vec<Plugin>) -> ConfigMap {
+        let mut main_conf = ConfigMap::default();
+        let main_conf_parser = ConfigMapParser::load_config(path);
+
+        let config_parser = main_conf_parser.config.clone();
+        for (host, host_config_parser) in main_conf_parser.host.into_iter().flatten() {
+            let mut config_parser = config_parser.clone();
+            merge_yaml(&mut config_parser, host_config_parser.config);
+            let plugin_list = load_plugins(&config_parser);
+            let mut uri_config: Option<HashMap<String, Vec<Plugin>>> = None;
+            for (uri, uri_config_parser) in host_config_parser.uri.into_iter().flatten() {
+                let mut config_parser = config_parser.clone();
+                merge_yaml(&mut config_parser, uri_config_parser);
+                let plugin_list = load_plugins(&config_parser);
+                uri_config.get_or_insert_default().insert(uri, plugin_list);
+            }
+            main_conf.host.get_or_insert_default().insert(
+                host,
+                HostConfig {
+                    uri: uri_config,
+                    config: plugin_list,
+                },
+            );
+        }
+        for (uri, uri_config) in main_conf_parser.uri.into_iter().flatten() {
+            let mut config_parser = config_parser.clone();
+            merge_yaml(&mut config_parser, uri_config);
+            let plugin_list = load_plugins(&config_parser);
+            main_conf
+                .uri
+                .get_or_insert_default()
+                .insert(uri, plugin_list);
+        }
+
+        main_conf.config = load_plugins(&config_parser);
+        main_conf
+    }
+
+    pub fn get_config_for_request(&self, host: Option<&str>, uri: &str) -> &Vec<Plugin> {
+        let mut config = &self.config;
+        let mut uri_map = &self.uri;
+        if let Some(host_map) = &self.host 
+        && let Some(host) = host 
+        && let Some(host_config) = host_map.get(host) {
+            config = &host_config.config; 
+            uri_map = &host_config.uri;
+        }
+
+        let uri_map = match uri_map {
+            Some(uri_map) => {
+                if uri_map.is_empty() {
+                    return config;
+                }
+                uri_map
+            },
+            None => return config,
+        };
+
+        let mut uri: &str = uri;
+        if let Some(i) = uri.find('?') {
+            uri = &uri[..i];
+        }
+        
+        if let Some(config) = uri_map.get(uri) {
+            return config;
+        }
+
+        while let Some(i) = uri.rfind('/') {
+            uri = &uri[..i];
+            if let Some(config) = uri_map.get(uri) {
+                return config;
+            }
+        }
+        config
+    }
+}
+
 impl ConfigMapParser {
     pub fn load_config(filename: &str) -> ConfigMapParser {
         let file_reader = std::fs::File::open(filename).unwrap();
@@ -49,7 +150,9 @@ impl ConfigMapParser {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ConfigMapParser, Config, JequiConfig};
+    use std::vec;
+
+    use crate::{ConfigMapParser, Config, JequiConfig, ConfigMap, config::load_plugin, Plugin};
 
     static CONF_TEST_PATH: &str = "test/test.conf";
 
@@ -61,8 +164,36 @@ mod tests {
 
         let mut test_config = Config::default();
         test_config.tls_active = true;
-        test_config.ip = "1.2.3.4".to_owned();
+        test_config.ip = "1.1.1.1".to_owned();
 
         assert_eq!(conf, test_config)
+    }
+
+    #[test]
+    fn get_config_for_request_test() {
+        let config_map = ConfigMap::load(CONF_TEST_PATH, |val| {
+            vec![load_plugin(val).unwrap()]
+        });
+
+        let get_config: fn(&Vec<Plugin>) -> &Config = |conf| {
+           conf.get(0).unwrap().config.as_any().downcast_ref::<Config>().unwrap() 
+        };
+
+        assert_eq!(get_config(&config_map.config).ip, "1.1.1.1");
+        let host_jequi_com = config_map.host.as_ref().unwrap().get("jequi.com").unwrap();
+        assert_eq!(get_config(&host_jequi_com.config).ip, "1.1.2.1");
+        assert_eq!(get_config(host_jequi_com.uri.as_ref().unwrap().get("/app").unwrap()).ip, "1.1.2.2");
+        assert_eq!(get_config(host_jequi_com.uri.as_ref().unwrap().get("/api").unwrap()).ip, "1.1.2.3");
+        assert_eq!(get_config(&config_map.host.as_ref().unwrap().get("www.jequi.com").unwrap().config).ip, "1.1.3.1");
+        assert_eq!(get_config(config_map.uri.as_ref().unwrap().get("/app").unwrap()).ip, "1.2.1.1");
+        assert_eq!(get_config(config_map.uri.as_ref().unwrap().get("/test").unwrap()).ip, "1.2.1.2");
+
+        assert_eq!(get_config(config_map.get_config_for_request(None, "/")).ip, "1.1.1.1");
+        assert_eq!(get_config(config_map.get_config_for_request(Some("jequi.com"), "/test")).ip, "1.1.2.1");
+        assert_eq!(get_config(config_map.get_config_for_request(Some("jequi.com"), "/app/hello")).ip, "1.1.2.2");
+        assert_eq!(get_config(config_map.get_config_for_request(Some("jequi.com"), "/api/")).ip, "1.1.2.3");
+        assert_eq!(get_config(config_map.get_config_for_request(Some("www.jequi.com"), "/test")).ip, "1.1.3.1");
+        assert_eq!(get_config(config_map.get_config_for_request(None, "/app/hey")).ip, "1.2.1.1");
+        assert_eq!(get_config(config_map.get_config_for_request(None, "/test")).ip, "1.2.1.2");
     }
 }

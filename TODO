@@ -1,4 +1,3 @@
-Organize granular config code (add tests, move functions from server to some other place)
 Make static files plugin get files relative from the path in config
 Go plugin get path and function from config
 FIX MEMORY LEAK FROM RELOAD (make reload) (pmap `cat jequi.pid` | tail -n 1) (dlclose does not unload library from memory)

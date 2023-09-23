@@ -1,10 +1,7 @@
 use serde_yaml::Value;
-
 use jequi::Plugin;
 
-pub fn load_configs(
-    config: &Value,
-) -> Vec<Plugin> {
+pub fn load_plugins(config: &Value) -> Vec<Plugin> {
     // TODO: implement this function as a macro to load plugins dynamically
     let mut plugins: Vec<Plugin> = Vec::new();
     plugins.push(jequi::config::load_plugin(config).expect("main config is required"));
