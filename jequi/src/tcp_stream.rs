@@ -1,12 +1,12 @@
 use indexmap::IndexMap;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use std::{
     io::{IoSlice, Result},
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::{RawStream, HttpConn, RawHTTP, Request, Response};
+use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for RawStream<S> {
     fn poll_read(

@@ -7,7 +7,7 @@ pub mod response;
 pub mod ssl;
 pub mod tcp_stream;
 
-use std::{any::Any, sync::Arc, collections::HashMap, fmt::Debug};
+use std::{any::Any, collections::HashMap, fmt::Debug, sync::Arc};
 
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -18,27 +18,27 @@ use tokio_openssl::SslStream;
 #[derive(Debug)]
 pub struct Plugin {
     pub config: Arc<dyn JequiConfig>,
-    pub request_handler: Option<Arc<dyn RequestHandler>>
+    pub request_handler: Option<Arc<dyn RequestHandler>>,
 }
 
 #[derive(Debug)]
 pub struct HostConfig {
-    pub uri: Option<HashMap<String,Vec<Plugin>>>,
-    pub config: Vec<Plugin>
+    pub uri: Option<HashMap<String, Vec<Plugin>>>,
+    pub config: Vec<Plugin>,
 }
 
 #[derive(Default, Debug)]
 pub struct ConfigMap {
     pub host: Option<HashMap<String, HostConfig>>,
     pub uri: Option<HashMap<String, Vec<Plugin>>>,
-    pub config: Vec<Plugin>
+    pub config: Vec<Plugin>,
 }
 
 #[derive(Deserialize)]
 pub struct HostConfigParser {
-    pub uri: Option<HashMap<String,Value>>,
+    pub uri: Option<HashMap<String, Value>>,
     #[serde(flatten)]
-    pub config: Value
+    pub config: Value,
 }
 
 #[derive(Deserialize)]
@@ -46,20 +46,19 @@ pub struct ConfigMapParser {
     pub host: Option<HashMap<String, HostConfigParser>>,
     pub uri: Option<HashMap<String, Value>>,
     #[serde(flatten)]
-    pub config: Value
+    pub config: Value,
 }
 
-pub trait RequestHandler: Send + Sync + Debug
-{
+pub trait RequestHandler: Send + Sync + Debug {
     fn handle_request(&self, req: &mut Request, resp: &mut Response);
 }
 
-pub trait JequiConfig: Any +  Send + Sync + Debug
-{
-    fn load(config: &Value) -> Option<Self> where Self: Sized;
+pub trait JequiConfig: Any + Send + Sync + Debug {
+    fn load(config: &Value) -> Option<Self>
+    where
+        Self: Sized;
     fn as_any(&self) -> &dyn Any;
 }
-
 
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(default)]

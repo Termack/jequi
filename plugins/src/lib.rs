@@ -1,5 +1,5 @@
-use serde_yaml::Value;
 use jequi::Plugin;
+use serde_yaml::Value;
 
 pub fn load_plugins(config: &Value) -> Vec<Plugin> {
     // TODO: implement this function as a macro to load plugins dynamically

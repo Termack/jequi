@@ -8,10 +8,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, path::Path};
 
-pub fn name() -> String {
-    "jequi_go".to_owned()
-}
-
 pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
     Some(Plugin {

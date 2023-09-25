@@ -1,16 +1,14 @@
-use jequi::{JequiConfig, Request, RequestHandler, Response, Plugin};
-use serde_yaml::Value;
+use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
 use serde::Deserialize;
+use serde_yaml::Value;
 
 use std::{
+    any::Any,
     fs::File,
     io::{ErrorKind, Read},
-    path::{Path, PathBuf}, any::Any, sync::Arc, 
+    path::{Path, PathBuf},
+    sync::Arc,
 };
-
-pub fn name() -> String {
-    "serve_static_files".to_owned()
-}
 
 pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
@@ -23,16 +21,23 @@ pub fn load_plugin(config: &Value) -> Option<Plugin> {
 #[derive(Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct Config {
     pub static_files_path: Option<String>,
+    uri: Option<String>,
 }
 
 impl Config {
     pub const fn new() -> Self {
-        Config { static_files_path: None }
+        Config {
+            static_files_path: None,
+            uri: None,
+        }
     }
 }
 
 impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self> where Self: Sized {
+    fn load(config: &Value) -> Option<Self>
+    where
+        Self: Sized,
+    {
         let conf: Config = Deserialize::deserialize(config).unwrap();
         if conf == Config::default() {
             return None;
@@ -54,7 +59,11 @@ impl RequestHandler for Config {
             return;
         }
 
-        let uri = req.uri.trim_start_matches("/");
+        let mut uri = req.uri.as_str();
+        if let Some(uri_config) = self.uri.as_deref() {
+            uri = uri.strip_prefix(uri_config).unwrap_or(uri);
+        }
+        uri = uri.trim_start_matches("/");
 
         let mut final_path = PathBuf::new();
         for p in Path::new(uri) {
@@ -174,5 +183,19 @@ mod tests {
 
         assert_eq!(http.response.status, 404);
         assert_eq!(&http.response.body_buffer[..http.response.body_length], b"");
+
+        // Uri config test
+        conf.uri = Some("/uri".to_string());
+
+        http.request.uri = "/uri/file".to_string();
+        http.response.body_length = 0;
+
+        conf.handle_request(&mut http.request, &mut http.response);
+
+        assert_eq!(http.response.status, 200);
+        assert_eq!(
+            &http.response.body_buffer[..http.response.body_length],
+            b"hello"
+        );
     }
 }
