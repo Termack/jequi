@@ -14,7 +14,7 @@ go_setup:
 	&& go mod tidy
 
 go: clear go_setup
-	cd ./go/jequi && go build -o $(LIB_DIR)/$(LIB_NAME).so -buildmode=c-shared
+	cd ./go/jequi && go build -o $(LIB_DIR)/$(LIB_NAME).so -ldflags='-shared'
 
 run: go
 	cargo run

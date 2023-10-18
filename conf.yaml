@@ -8,6 +8,6 @@ host:
       /app:
         static_files_path: "test/host/uri/"
     static_files_path: "test/host/"
-uri:
-  /api/v2:
-    go_handler_path: "todo"
+# uri:
+#   /api/v2:
+#     go_handler_path: "todo"

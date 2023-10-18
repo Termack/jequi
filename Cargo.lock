@@ -261,9 +261,11 @@ name = "jequi_go"
 version = "0.1.0"
 dependencies = [
  "jequi",
+ "libc",
  "libloading",
  "serde",
  "serde_yaml",
+ "tokio",
 ]
 
 [[package]]

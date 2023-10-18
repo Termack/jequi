@@ -10,3 +10,5 @@ jequi = { path = "../../jequi" }
 serde = {version = "1.0.183",features = ["derive"] }
 libloading = "0.8.0"
 serde_yaml = "0.9.25"
+libc = "0.2.148"
+tokio = { version = "1", features = ["full"] }
