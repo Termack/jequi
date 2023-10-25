@@ -39,7 +39,7 @@ impl JequiConfig for Config {
         Self: Sized,
     {
         let conf: Config = Deserialize::deserialize(config).unwrap();
-        if conf == Config::default() {
+        if conf == Config::default() || conf.static_files_path == None {
             return None;
         }
 

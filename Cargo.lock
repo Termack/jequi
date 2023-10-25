@@ -264,6 +264,7 @@ dependencies = [
  "libloading",
  "serde",
  "serde_yaml",
+ "tokio",
 ]
 
 [[package]]

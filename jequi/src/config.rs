@@ -61,14 +61,15 @@ fn merge_yaml(a: &mut Value, b: Value) {
 }
 
 fn merge_config_and_load_plugins(
-    mut config_parser: &mut Value,
-    config_to_merge: Value,
+    mut _config_parser: &mut Value,
+    config_to_merge: &mut Value,
     key_to_add: &str,
     value_to_add: String,
     load_plugins: fn(&Value) -> Vec<Plugin>,
 ) -> Vec<Plugin> {
     // TODO: maybe merging doesn't make sense, i need to think about it
-    merge_yaml(&mut config_parser, config_to_merge);
+    // merge_yaml(&mut config_parser, config_to_merge);
+    let config_parser = config_to_merge;
     if let Value::Mapping(ref mut config_parser) = config_parser {
         config_parser.insert(key_to_add.into(), value_to_add.into());
     }
@@ -81,21 +82,21 @@ impl ConfigMap {
         let main_conf_parser = ConfigMapParser::load_config(path);
 
         let config_parser = main_conf_parser.config.clone();
-        for (host, host_config_parser) in main_conf_parser.host.into_iter().flatten() {
+        for (host, mut host_config_parser) in main_conf_parser.host.into_iter().flatten() {
             let mut config_parser = config_parser.clone();
             let plugin_list = merge_config_and_load_plugins(
                 &mut config_parser,
-                host_config_parser.config,
+                &mut host_config_parser.config,
                 "host",
                 host.clone(),
                 load_plugins,
             );
             let mut uri_config: Option<HashMap<String, Vec<Plugin>>> = None;
-            for (uri, uri_config_parser) in host_config_parser.uri.into_iter().flatten() {
+            for (uri, mut uri_config_parser) in host_config_parser.uri.into_iter().flatten() {
                 let mut config_parser = config_parser.clone();
                 let plugin_list = merge_config_and_load_plugins(
                     &mut config_parser,
-                    uri_config_parser,
+                    &mut uri_config_parser,
                     "uri",
                     uri.clone(),
                     load_plugins,
@@ -111,11 +112,11 @@ impl ConfigMap {
             );
         }
 
-        for (uri, uri_config_parser) in main_conf_parser.uri.into_iter().flatten() {
+        for (uri, mut uri_config_parser) in main_conf_parser.uri.into_iter().flatten() {
             let mut config_parser = config_parser.clone();
             let plugin_list = merge_config_and_load_plugins(
                 &mut config_parser,
-                uri_config_parser,
+                &mut uri_config_parser,
                 "uri",
                 uri.clone(),
                 load_plugins,

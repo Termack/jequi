@@ -4,10 +4,10 @@ host:
   jequi.com:
     uri:
       /api:
-        go_handler_path: "todo"
+        go_library_path: "target/debug/jequi_go.so"
       /app:
         static_files_path: "test/host/uri/"
     static_files_path: "test/host/"
 uri:
   /api/v2:
-    go_handler_path: "todo"
+    go_library_path: "target/debug/jequi_go.so"

@@ -1,12 +1,9 @@
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
-use libloading::{self, Library};
+use libloading::{self, Library, Symbol};
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::any::Any;
-use std::fs;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{env, path::Path};
 
 pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
@@ -16,17 +13,27 @@ pub fn load_plugin(config: &Value) -> Option<Plugin> {
     })
 }
 
-#[derive(Deserialize, Clone, Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
+struct Lib(Option<Library>);
+
+impl PartialEq for Lib {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.is_none() && other.0.is_none()
+    }
+}
+
+#[derive(Deserialize, Default, Debug, PartialEq)]
 pub struct Config {
-    pub go_handler_path: Option<String>,
-    library_path: Option<String>,
+    pub go_library_path: Option<String>,
+    #[serde(skip)]
+    lib: Lib,
 }
 
 impl Config {
     pub const fn new() -> Self {
         Config {
-            go_handler_path: None,
-            library_path: None,
+            go_library_path: None,
+            lib: Lib(None),
         }
     }
 }
@@ -41,28 +48,10 @@ impl JequiConfig for Config {
             return None;
         }
 
-        if let Some(lib_path) = conf.library_path.as_ref() {
-            if Path::new(&lib_path).exists() {
-                fs::remove_file(lib_path).unwrap();
-            }
-        }
-
-        let mut original_lib_path = match env::var("LIB_DIR") {
-            Ok(dir) => dir,
-            Err(_) => "target/debug".to_string(),
-        };
-
-        original_lib_path = format!("{}/jequi_go.so", original_lib_path);
-        let milis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-        let new_file_path = format!("/tmp/jequi_go.{}.so", milis);
-        fs::copy(original_lib_path, &new_file_path).unwrap();
         unsafe {
-            Library::new(&new_file_path).unwrap();
+            let lib = Library::new(conf.go_library_path.as_ref().unwrap()).unwrap();
+            conf.lib = Lib(Some(lib));
         }
-        conf.library_path = Some(new_file_path);
         Some(conf)
     }
     fn as_any(&self) -> &dyn Any {
@@ -72,13 +61,73 @@ impl JequiConfig for Config {
 
 impl RequestHandler for Config {
     fn handle_request(&self, req: &mut Request, resp: &mut Response) {
-        let path = self.library_path.as_ref().unwrap();
+        let lib = self.lib.0.as_ref().unwrap();
         unsafe {
-            let lib = libloading::Library::new(path).unwrap();
             let go_handle_response: libloading::Symbol<
                 unsafe extern "C" fn(req: *mut Request, resp: *mut Response),
             > = lib.get(b"HandleRequest\0").unwrap();
             go_handle_response(req, resp);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    static TEST_PATH: &str = "test/";
+    static GO_LIB_FILE: &str = "jequi_go.so";
+
+    use std::{io::Cursor, process::Command};
+
+    use jequi::{HttpConn, JequiConfig, RawStream, RequestHandler};
+    use serde_yaml::{Mapping, Value};
+
+    use crate::Config;
+
+    #[tokio::test]
+    async fn handle_go_request() {
+        let mut buf = [0; 35];
+        let mut http = HttpConn::new(
+            RawStream::Normal(Cursor::new(vec![])),
+            &mut [0; 0],
+            &mut buf,
+        )
+        .await;
+
+        let output = Command::new("go")
+            .args([
+                "build",
+                "-C",
+                TEST_PATH,
+                "-o",
+                GO_LIB_FILE,
+                "-buildmode=c-shared",
+            ])
+            .output()
+            .expect("failed to build go code");
+
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout[..]),
+            String::from_utf8_lossy(&output.stderr[..])
+        );
+
+        let go_library_path = format!("{}/{}", TEST_PATH, GO_LIB_FILE);
+        let mut yaml_config = Mapping::new();
+        yaml_config.insert("go_library_path".into(), go_library_path.clone().into());
+
+        let conf = Config::load(&Value::Mapping(yaml_config)).unwrap();
+
+        http.request.uri = "/file".to_string();
+
+        conf.handle_request(&mut http.request, &mut http.response);
+
+        assert_eq!(http.response.status, 200);
+        assert_eq!(
+            &http.response.body_buffer[..http.response.body_length],
+            b"hello"
+        );
+        assert_eq!(http.response.get_header("test").unwrap(), &http.request.uri);
     }
 }

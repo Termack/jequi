@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 jequi = { path = "../../jequi" }
-serde = {version = "1.0.183",features = ["derive"] }
+serde = { version = "1.0.183", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
 libloading = "0.8.0"
 serde_yaml = "0.9.25"
+
