@@ -1,10 +1,10 @@
-Setup more examples:
- - some css and js in static_files
- - small api in go with sqlite
-Add proxy plugin
-HTTP2 and some other things in http1 (like keepalive)
+Add proxy tests
+Add proxy handler that can be called by other plugins like jequi_go
+HTTP2 and some other things in http1 (like keepalive, chunked, gzip)
 Proc macro to create a struct for configuration from plugin configs
 Add plugin to generate certificate
+Add logging
+Add metrics
 MAYBE: Change jequi_go config to compile (get go code path instead of compiled library)
 MAYBE: make a pull request to go for dlclose to work (https://github.com/golang/go/issues/11100) (something like runtime.shutdown())
 MAYBE: load plugins in runtime using https://crates.io/crates/abi_stable
