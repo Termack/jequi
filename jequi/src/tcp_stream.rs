@@ -1,4 +1,4 @@
-use indexmap::IndexMap;
+use http::HeaderMap;
 use std::{
     io::{IoSlice, Result},
     pin::Pin,
@@ -83,13 +83,13 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
             request: Request {
                 method: String::new(),
                 uri: String::new(),
-                headers: IndexMap::new(),
+                headers: HeaderMap::new(),
                 host: None,
                 body: None,
             },
             response: Response {
                 status: 0,
-                headers: IndexMap::new(),
+                headers: HeaderMap::new(),
                 body_buffer,
                 body_length: 0,
             },

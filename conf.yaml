@@ -1,5 +1,5 @@
 tls_active: true
-static_files_path: "test/"
+proxy_address: "www.google.com.br"
 host:
   jequi.com:
     uri:
@@ -7,6 +7,8 @@ host:
         go_library_path: "target/debug/jequi_go.so"
       /app:
         static_files_path: "test/host/uri/"
+      /google:
+        proxy_address: "google.com"
     static_files_path: "test/host/"
 uri:
   /api/v2:

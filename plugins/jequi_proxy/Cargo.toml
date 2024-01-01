@@ -1,21 +1,17 @@
 [package]
-name = "jequi"
+name = "jequi_proxy"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-name = "jequi"
-crate-type = ["lib"]
-
 [dependencies]
-serde_yaml = "0.9.25"
+jequi = { path = "../../jequi" }
 serde = { version = "1.0.183", features = ["derive"] }
-openssl = "0.10.41"
-dyn-clone = "1.0.13"
-futures = "0.3.29"
 tokio = { version = "1", features = ["full"] }
-tokio-openssl = "0.6.3"
-trait-set = "0.3.0"
+serde_yaml = "0.9.25"
+futures = "0.3.29"
 http = "0.2.9"
+hyper = { version = "0.14.27", features = ["full"] }
+hyper-tls = "0.5.0"
+openssl = "0.10.41"

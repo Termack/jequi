@@ -14,7 +14,12 @@ pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
     Some(Plugin {
         config: config.clone(),
-        request_handler: Some(config.clone()),
+        request_handler: RequestHandler(Some(Arc::new(
+            move |req: &mut Request, resp: &mut Response<'_>| {
+                config.handle_request(req, resp);
+                None
+            },
+        ))),
     })
 }
 
@@ -31,26 +36,7 @@ impl Config {
             uri: None,
         }
     }
-}
 
-impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        let conf: Config = Deserialize::deserialize(config).unwrap();
-        if conf == Config::default() || conf.static_files_path == None {
-            return None;
-        }
-
-        Some(conf)
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl RequestHandler for Config {
     fn handle_request(&self, req: &mut Request, resp: &mut Response) {
         let root = Path::new(self.static_files_path.as_ref().unwrap());
 
@@ -102,6 +88,23 @@ impl RequestHandler for Config {
         }
 
         resp.status = 200;
+    }
+}
+
+impl JequiConfig for Config {
+    fn load(config: &Value) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        let conf: Config = Deserialize::deserialize(config).unwrap();
+        if conf == Config::default() || conf.static_files_path == None {
+            return None;
+        }
+
+        Some(conf)
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use indexmap::IndexMap;
+use http::HeaderMap;
 
 use crate::RawStream;
 
@@ -127,26 +127,29 @@ hello world"
             .to_vec(),
     ];
 
-    let expected_results: Vec<IndexMap<String, String>> = vec![
-        IndexMap::from([
-            ("host".to_string(), "example.com".to_string()),
-            ("content-type".to_string(), "application/json".to_string()),
+    let expected_results: Vec<HeaderMap> = vec![
+        HeaderMap::from_iter([
+            ("host".parse().unwrap(), "example.com".parse().unwrap()),
+            (
+                "content-type".parse().unwrap(),
+                "application/json".parse().unwrap(),
+            ),
         ]),
-        IndexMap::from([
-            ("user-agent".to_string(), "Mozilla".to_string()),
-            ("accept-encoding".to_string(), "gzip".to_string()),
+        HeaderMap::from_iter([
+            ("user-agent".parse().unwrap(), "Mozilla".parse().unwrap()),
+            ("accept-encoding".parse().unwrap(), "gzip".parse().unwrap()),
         ]),
-        IndexMap::from([
-            ("host".to_string(), "host.com".to_string()),
-            ("cookies".to_string(), "aa=bb".to_string()),
+        HeaderMap::from_iter([
+            ("host".parse().unwrap(), "host.com".parse().unwrap()),
+            ("cookies".parse().unwrap(), "aa=bb".parse().unwrap()),
         ]),
-        IndexMap::from([
-            ("bla".to_string(), "bla".to_string()),
-            ("ble".to_string(), "ble".to_string()),
-            ("header".to_string(), "haaa".to_string()),
-            ("wowo".to_string(), "10034mc amk".to_string()),
+        HeaderMap::from_iter([
+            ("bla".parse().unwrap(), "bla".parse().unwrap()),
+            ("ble".parse().unwrap(), "ble".parse().unwrap()),
+            ("header".parse().unwrap(), "haaa".parse().unwrap()),
+            ("wowo".parse().unwrap(), "10034mc amk".parse().unwrap()),
         ]),
-        IndexMap::from([("content-length".to_string(), "11".to_string())]),
+        HeaderMap::from_iter([("content-length".parse().unwrap(), "11".parse().unwrap())]),
     ];
 
     for (i, r) in requests_in.iter().enumerate() {

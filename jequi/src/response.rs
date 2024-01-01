@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{HttpConn, Response};
+use http::{HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
@@ -15,15 +16,15 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         self.response
             .set_header("content-length", &content_length.to_string());
         for (key, value) in &self.response.headers {
-            let header = format!("{}: {}\n", key, value);
+            let header = format!("{}: {}\n", key, value.to_str().unwrap());
             headers += &header;
         }
         headers += "\n";
-        self.raw.stream.write(headers.as_bytes()).await.unwrap();
+        self.raw.stream.write_all(headers.as_bytes()).await.unwrap();
         if content_length > 0 {
             self.raw
                 .stream
-                .write(&self.response.body_buffer[..content_length])
+                .write_all(&self.response.body_buffer[..content_length])
                 .await
                 .unwrap();
         }
@@ -32,15 +33,15 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
 }
 
 impl<'a> Response<'a> {
-    pub fn set_header(&mut self, header: &str, value: &str) -> Option<String> {
+    pub fn set_header(&mut self, header: &str, value: &str) -> Option<HeaderValue> {
         self.headers.insert(
-            header.to_string().trim().to_lowercase(),
-            value.to_string().trim().to_string(),
+            header.trim().to_lowercase().parse::<HeaderName>().unwrap(),
+            value.parse().unwrap(),
         )
     }
 
-    pub fn get_header(&mut self, header: &str) -> Option<&String> {
-        self.headers.get(&header.to_string().trim().to_lowercase())
+    pub fn get_header(&mut self, header: &str) -> Option<&HeaderValue> {
+        self.headers.get(header.to_lowercase().trim())
     }
 
     pub fn write_body(&mut self, bytes: &[u8]) -> Result<usize> {
@@ -62,14 +63,13 @@ impl<'a> Response<'a> {
 mod tests {
     use std::io::Cursor;
 
-    use indexmap::IndexMap;
-
+    use http::HeaderMap;
     use tokio::io::AsyncReadExt;
 
     use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
 
     fn new_response<'a>(
-        headers: IndexMap<String, String>,
+        headers: HeaderMap,
         status: usize,
         version: String,
         body: &'a mut [u8],
@@ -87,7 +87,7 @@ mod tests {
             request: Request {
                 method: String::new(),
                 uri: String::new(),
-                headers: IndexMap::new(),
+                headers: HeaderMap::new(),
                 host: None,
                 body: None,
             },
@@ -107,22 +107,23 @@ mod tests {
             Vec::from("test2 2 2 2 2"),
             Vec::from("blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n".to_owned())
         );
-        let responses_in: Vec<HttpConn<Cursor<Vec<u8>>>> = vec![
+        let responses_in: Vec<HttpConn<Cursor<Vec<u8>>>> =
+            vec![
             new_response(
-                IndexMap::from([
-                    ("server".to_string(), "jequi".to_string()),
-                    ("content-type".to_string(), "application/json".to_string()),
+                HeaderMap::from_iter([
+                    ("server".parse().unwrap(), "jequi".parse().unwrap()),
+                    ("content-type".parse().unwrap(), "application/json".parse().unwrap()),
                 ]),
                 301,
                 "HTTP/1.1".to_string(),
                 &mut bodies.0,
             ),
             new_response(
-                IndexMap::from([
-                    ("cache-control".to_string(), "max-age=1296000".to_string()),
+                HeaderMap::from_iter([
+                    ("cache-control".parse().unwrap(), "max-age=1296000".parse().unwrap()),
                     (
-                        "strict-transport-security".to_string(),
-                        "max-age=31536000".to_string(),
+                        "strict-transport-security".parse().unwrap(),
+                        "max-age=31536000".parse().unwrap(),
                     ),
                 ]),
                 200,
@@ -130,12 +131,12 @@ mod tests {
                 &mut bodies.1,
             ),
             new_response(
-                IndexMap::from([
-                    ("content-length".to_string(), "1565".to_string()),
+                HeaderMap::from_iter([
+                    ("content-length".parse().unwrap(), "1565".parse().unwrap()),
                     (
-                        "set-cookie".to_string(),
+                        "set-cookie".parse().unwrap(),
                         "PHPSESSID=bla; path=/; domain=.example.com;HttpOnly;Secure;SameSite=None"
-                            .to_string(),
+                            .parse().unwrap(),
                     ),
                 ]),
                 404,
@@ -188,7 +189,7 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     #[test]
     fn get_set_header_test() {
         let mut http = new_response(
-            IndexMap::from([("server".to_string(), "not-jequi".to_string())]),
+            HeaderMap::from_iter([("server".parse().unwrap(), "not-jequi".parse().unwrap())]),
             0,
             String::new(),
             &mut [],
@@ -196,11 +197,11 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
         http.response.set_header("server", "jequi");
         let server = http.response.get_header("server");
-        assert_eq!(Some(&"jequi".to_string()), server);
+        assert_eq!("jequi", server.unwrap().to_str().unwrap());
 
         http.response.set_header("Content-Length", "40");
         let server = http.response.get_header("content-length");
-        assert_eq!(Some(&"40".to_string()), server);
+        assert_eq!("40", server.unwrap().to_str().unwrap());
     }
 
     #[tokio::test]

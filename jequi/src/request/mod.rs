@@ -1,3 +1,4 @@
+use http::{HeaderName, HeaderValue};
 use std::borrow::Cow;
 use std::io::{Error, ErrorKind, Result};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
@@ -114,54 +115,65 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         let mut found_header = false;
         let buffer = &self.raw.buffer[self.raw.start..self.raw.end];
         for i in 0..buffer.len() {
-            if line_start == None {
+            if line_start.is_none() {
                 line_start = Some(i);
             }
 
-            if buffer[i] == b'\n' {
-                found_header = true;
-                line_start = None;
-                if let Some(ref header) = header {
-                    let mut value: &[u8] = &[];
-                    let mut value_end = i;
-                    if let Some(prev) = buffer.get(i - 1) {
-                        if *prev == b'\r' {
-                            value_end = i - 1
+            match buffer[i] {
+                b'\n' => {
+                    found_header = true;
+                    line_start = None;
+                    if let Some(ref header) = header {
+                        let mut value: &[u8] = &[];
+                        let mut value_end = i;
+                        if let Some(prev) = buffer.get(i - 1) {
+                            if *prev == b'\r' {
+                                value_end = i - 1
+                            }
+                        }
+                        if value_start != i {
+                            value = &buffer[value_start..value_end];
+                        }
+                        let value = String::from_utf8_lossy(value).trim().to_string();
+                        let header = header.trim().to_lowercase();
+                        if header == "host" {
+                            self.request.host = Some(value.clone());
+                        }
+                        self.request.headers.insert(
+                            header.parse::<HeaderName>().unwrap(),
+                            value.parse().unwrap(),
+                        );
+                        value_start = 0;
+                    } else {
+                        return (
+                            true,
+                            &[],
+                            Err(Error::new(ErrorKind::InvalidData, "Malformed header")),
+                        );
+                    }
+                    if let Some(mut next) = buffer.get(i + 1) {
+                        let mut index = i + 1;
+                        if *next == b'\r' {
+                            (next, index) = match buffer.get(i + 2) {
+                                Some(next) => (next, i + 2),
+                                None => (next, index),
+                            };
+                        }
+                        if *next == b'\n' {
+                            stop = true;
+                            line_start = Some(index + 1);
+                            break;
                         }
                     }
-                    if value_start != i {
-                        value = &buffer[value_start..value_end];
-                    }
-                    let value = String::from_utf8_lossy(value).trim().to_string();
-                    let header = header.trim().to_lowercase();
-                    if header == "host" {
-                        self.request.host = Some(value.clone());
-                    }
-                    self.request.headers.insert(header, value);
-                } else {
-                    return (
-                        true,
-                        &[],
-                        Err(Error::new(ErrorKind::InvalidData, "Malformed header")),
-                    );
                 }
-                if let Some(mut next) = buffer.get(i + 1) {
-                    let mut index = i + 1;
-                    if *next == b'\r' {
-                        (next, index) = match buffer.get(i + 2) {
-                            Some(next) => (next, i + 2),
-                            None => (next, index),
-                        };
+                b':' => {
+                    if value_start != 0 {
+                        continue;
                     }
-                    if *next == b'\n' {
-                        stop = true;
-                        line_start = Some(index + 1);
-                        break;
-                    }
+                    header = Some(String::from_utf8_lossy(&buffer[line_start.unwrap()..i]));
+                    value_start = i + 1
                 }
-            } else if buffer[i] == b':' {
-                header = Some(String::from_utf8_lossy(&buffer[line_start.unwrap()..i]));
-                value_start = i + 1
+                _ => (),
             }
         }
 
@@ -238,6 +250,13 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
             .request
             .get_header("Content-Length")
             .ok_or(Error::new(ErrorKind::NotFound, "No content length"))?
+            .to_str()
+            .map_err(|err| {
+                Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Cant convert content length to int: {}", err),
+                )
+            })?
             .parse()
             .map_err(|err| {
                 Error::new(
@@ -290,8 +309,8 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
 }
 
 impl<'a> Request {
-    pub fn get_header(&self, header: &str) -> Option<&String> {
-        self.headers.get(&header.to_string().trim().to_lowercase())
+    pub fn get_header(&self, header: &str) -> Option<&HeaderValue> {
+        self.headers.get(header.to_lowercase().trim())
     }
 
     pub fn get_body(&self) -> Option<&String> {

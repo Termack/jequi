@@ -11,5 +11,8 @@ pub fn load_plugins(config: &Value) -> Vec<Plugin> {
     if let Some(plugin) = jequi_serve_static::load_plugin(config) {
         plugins.push(plugin);
     }
+    if let Some(plugin) = jequi_proxy::load_plugin(config) {
+        plugins.push(plugin);
+    }
     plugins
 }

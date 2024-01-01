@@ -14,8 +14,8 @@ api = { path = "../api" }
 
 [dependencies]
 jequi = { path = "../jequi" }
-indexmap = "1.9.1"
-serde = {version = "1.0.183",features = ["derive"] }
+serde = { version = "1.0.183", features = ["derive"] }
 serde_yaml = "0.9.25"
 jequi_go = { path = "jequi_go" }
 jequi_serve_static = { path = "jequi_serve_static" }
+jequi_proxy = { path = "jequi_proxy" }

@@ -3,13 +3,15 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 use serde::Deserialize;
 use serde_yaml::from_reader;
 
-use crate::{Config, ConfigMap, ConfigMapParser, HostConfig, JequiConfig, Plugin, Value};
+use crate::{
+    Config, ConfigMap, ConfigMapParser, HostConfig, JequiConfig, Plugin, RequestHandler, Value,
+};
 
 pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
     Some(Plugin {
         config: config.clone(),
-        request_handler: None,
+        request_handler: RequestHandler(None),
     })
 }
 

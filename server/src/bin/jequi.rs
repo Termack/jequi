@@ -12,7 +12,7 @@ use tokio::{
 
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     let mut read_buffer = [0; 1024];
-    let mut body_buffer = [0; 1024];
+    let mut body_buffer = [0; 1024 * 256];
     let mut http: HttpConn<'_, TcpStream>;
     let conf = &config_map.config.get(0).unwrap().config;
     let conf = conf.as_any().downcast_ref::<Config>().unwrap();
@@ -46,9 +46,13 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
 
     let config = config_map.get_config_for_request(http.request.host.as_deref(), &http.request.uri);
 
-    for handler in config.iter().map(|x| &x.request_handler).flatten() {
-        handler.handle_request(&mut http.request, &mut http.response);
+    for handle_request in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
+        if let Some(fut) = handle_request(&mut http.request, &mut http.response) {
+            fut.await
+        }
     }
+
+    http.response.headers.remove("transfer-encoding");
 
     if http.response.status == 0 {
         http.response.status = 200;

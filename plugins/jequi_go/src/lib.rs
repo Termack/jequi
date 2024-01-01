@@ -1,5 +1,5 @@
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
-use libloading::{self, Library, Symbol};
+use libloading::{self, Library};
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::any::Any;
@@ -9,7 +9,12 @@ pub fn load_plugin(config: &Value) -> Option<Plugin> {
     let config = Arc::new(Config::load(config)?);
     Some(Plugin {
         config: config.clone(),
-        request_handler: Some(config.clone()),
+        request_handler: RequestHandler(Some(Arc::new(
+            move |req: &mut Request, resp: &mut Response<'_>| {
+                config.handle_request(req, resp);
+                None
+            },
+        ))),
     })
 }
 
@@ -36,6 +41,16 @@ impl Config {
             lib: Lib(None),
         }
     }
+
+    pub fn handle_request(&self, req: &mut Request, resp: &mut Response) {
+        let lib = self.lib.0.as_ref().unwrap();
+        unsafe {
+            let go_handle_response: libloading::Symbol<
+                unsafe extern "C" fn(req: *mut Request, resp: *mut Response),
+            > = lib.get(b"HandleRequest\0").unwrap();
+            go_handle_response(req, resp);
+        }
+    }
 }
 
 impl JequiConfig for Config {
@@ -59,18 +74,6 @@ impl JequiConfig for Config {
     }
 }
 
-impl RequestHandler for Config {
-    fn handle_request(&self, req: &mut Request, resp: &mut Response) {
-        let lib = self.lib.0.as_ref().unwrap();
-        unsafe {
-            let go_handle_response: libloading::Symbol<
-                unsafe extern "C" fn(req: *mut Request, resp: *mut Response),
-            > = lib.get(b"HandleRequest\0").unwrap();
-            go_handle_response(req, resp);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -79,7 +82,7 @@ mod tests {
 
     use std::{io::Cursor, process::Command};
 
-    use jequi::{HttpConn, JequiConfig, RawStream, RequestHandler};
+    use jequi::{HttpConn, JequiConfig, RawStream};
     use serde_yaml::{Mapping, Value};
 
     use crate::Config;
