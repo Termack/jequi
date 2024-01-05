@@ -14,8 +14,11 @@ api = { path = "../api" }
 
 [dependencies]
 indexmap = "1.9.1"
-plugins = { path = "../plugins" }
 jequi = { path = "../jequi" }
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
 serde_yaml = "0.9.25"
+plugins = { path = "../plugins" }
+jequi_go = { path = "../plugins/jequi_go" }
+jequi_proxy = { path = "../plugins/jequi_proxy" }
+jequi_serve_static = { path = "../plugins/jequi_serve_static" }

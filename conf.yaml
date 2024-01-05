@@ -1,5 +1,5 @@
 tls_active: true
-proxy_address: "www.google.com.br"
+proxy_address: "www.google.com"
 host:
   jequi.com:
     uri:

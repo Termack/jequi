@@ -43,17 +43,19 @@ pub struct Plugin {
     pub request_handler: RequestHandler,
 }
 
+pub type ConfigList = Vec<Plugin>;
+
 #[derive(Debug)]
 pub struct HostConfig {
-    pub uri: Option<HashMap<String, Vec<Plugin>>>,
-    pub config: Vec<Plugin>,
+    pub uri: Option<HashMap<String, ConfigList>>,
+    pub config: ConfigList,
 }
 
 #[derive(Default, Debug)]
 pub struct ConfigMap {
     pub host: Option<HashMap<String, HostConfig>>,
-    pub uri: Option<HashMap<String, Vec<Plugin>>>,
-    pub config: Vec<Plugin>,
+    pub uri: Option<HashMap<String, ConfigList>>,
+    pub config: ConfigList,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +78,14 @@ pub trait JequiConfig: Any + Send + Sync + Debug {
     where
         Self: Sized;
     fn as_any(&self) -> &dyn Any;
+}
+
+pub fn load_plugin(config: &Value) -> Option<Plugin> {
+    let config = Arc::new(Config::load(config)?);
+    Some(Plugin {
+        config: config.clone(),
+        request_handler: RequestHandler(None),
+    })
 }
 
 #[derive(Deserialize, Debug, PartialEq)]

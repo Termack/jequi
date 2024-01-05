@@ -7,14 +7,6 @@ use crate::{
     Config, ConfigMap, ConfigMapParser, HostConfig, JequiConfig, Plugin, RequestHandler, Value,
 };
 
-pub fn load_plugin(config: &Value) -> Option<Plugin> {
-    let config = Arc::new(Config::load(config)?);
-    Some(Plugin {
-        config: config.clone(),
-        request_handler: RequestHandler(None),
-    })
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -186,7 +178,7 @@ impl ConfigMapParser {
 mod tests {
     use std::vec;
 
-    use crate::{config::load_plugin, Config, ConfigMap, ConfigMapParser, JequiConfig, Plugin};
+    use crate::{load_plugin, Config, ConfigMap, ConfigMapParser, JequiConfig, Plugin};
 
     static CONF_TEST_PATH: &str = "test/test.conf";
 

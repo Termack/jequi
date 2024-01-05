@@ -1,6 +1,6 @@
 use chrono::Utc;
 use jequi::{Config, ConfigMap, HttpConn, RawStream};
-use plugins::load_plugins;
+use plugins::{get_plugin, load_plugins};
 use std::process;
 use std::{fs, io::ErrorKind, sync::Arc};
 use tokio::{
@@ -10,12 +10,14 @@ use tokio::{
     sync::RwLock,
 };
 
+load_plugins!();
+
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     let mut read_buffer = [0; 1024];
     let mut body_buffer = [0; 1024 * 256];
     let mut http: HttpConn<'_, TcpStream>;
-    let conf = &config_map.config.get(0).unwrap().config;
-    let conf = conf.as_any().downcast_ref::<Config>().unwrap();
+    let plugin_list = &config_map.config;
+    let conf = get_plugin!(plugin_list, jequi);
     if conf.tls_active {
         http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer).await;
     } else {

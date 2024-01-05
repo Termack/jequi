@@ -4,18 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-name = "plugins"
-crate-type = ["lib"]
-
-[build-dependencies]
-api = { path = "../api" }
+proc-macro = true
 
 [dependencies]
-jequi = { path = "../jequi" }
-serde = { version = "1.0.183", features = ["derive"] }
-serde_yaml = "0.9.25"
-jequi_go = { path = "jequi_go" }
-jequi_serve_static = { path = "jequi_serve_static" }
-jequi_proxy = { path = "jequi_proxy" }
+quote = "1.0.35"
+syn = "2.0.46"
