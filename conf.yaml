@@ -8,6 +8,7 @@ host:
       /app:
         static_files_path: "test/host/uri/"
       /google:
+        go_library_path: "target/debug/jequi_go.so"
         proxy_address: "google.com"
     static_files_path: "test/host/"
 uri:

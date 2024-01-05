@@ -5,6 +5,8 @@ Proc macro to create a struct for configuration from plugin configs
 Add plugin to generate certificate
 Add logging
 Add metrics
+Improve plugin loading (improve the sintax, change requirement logic, think of a better way to define handler execution order)
+MAYBE: add load balancing plugin that uses the proxy plugin
 MAYBE: Change jequi_go config to compile (get go code path instead of compiled library)
 MAYBE: make a pull request to go for dlclose to work (https://github.com/golang/go/issues/11100) (something like runtime.shutdown())
 MAYBE: load plugins in runtime using https://crates.io/crates/abi_stable

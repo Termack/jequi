@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use std::fs;
+use std::{collections::HashMap, fs};
 use syn::{parse::Parse, parse_macro_input, Ident, Token};
 
 struct MacroInput {
@@ -37,6 +37,7 @@ pub fn get_plugin(input: TokenStream) -> TokenStream {
 
     let mut index = None;
     for (i, line) in contents.lines().enumerate() {
+        let line = line.split('-').next().unwrap().trim();
         if line == plugin_name {
             index = Some(i)
         }
@@ -66,38 +67,38 @@ pub fn load_plugins(input: TokenStream) -> TokenStream {
         }
     };
 
+    let mut add_after = HashMap::new();
+
     let mut plugins = Vec::new();
-    for plugin in contents.lines() {
-        plugins.push(format_ident!("{}", plugin))
+    let mut indexes = Vec::new();
+    for (i, line) in contents.lines().enumerate() {
+        let mut info = line.split('-');
+        let plugin = info.next().unwrap().trim();
+        if let Some(info) = info.next() {
+            let requires = info.trim().strip_prefix("require ").unwrap().trim();
+            add_after.insert(requires, (plugin, i + 1));
+            continue;
+        }
+        plugins.push(format_ident!("{}", plugin));
+        indexes.push(i + 1);
+        if let Some((plugin, i)) = add_after.get(plugin) {
+            plugins.push(format_ident!("{}", plugin));
+            indexes.push(*i);
+        }
     }
+
+    let size = plugins.len() + 1;
 
     (quote! {
     pub fn load_plugins(config: &serde_yaml::Value) -> jequi::ConfigList {
-        let mut plugins: Vec<jequi::Plugin> = Vec::new();
-        plugins.push(jequi::load_plugin(config).expect("main config is required"));
+        let mut plugins: Vec<Option<jequi::Plugin>> = Vec::with_capacity(#size);
+        plugins.resize_with(#size, Default::default);
+        plugins.insert(0,Some(jequi::load_plugin(config).expect("main config is required")));
         #(
-        if let Some(plugin) = #plugins::load_plugin(config) {
-            plugins.push(plugin);
-        }
+        plugins.insert(#indexes,#plugins::load_plugin(config));
         )*
-        plugins
+        plugins.into_iter().flatten().collect::<Vec<_>>()
         }
     })
     .into()
 }
-
-// pub fn load_plugins(config: &Value) -> ConfigList {
-//     // TODO: implement this function as a macro to load plugins dynamically
-//     let mut plugins: Vec<Plugin> = Vec::new();
-//     plugins.push(jequi::config::load_plugin(config).expect("main config is required"));
-//     if let Some(plugin) = jequi_go::load_plugin(config) {
-//         plugins.push(plugin);
-//     }
-//     if let Some(plugin) = jequi_serve_static::load_plugin(config) {
-//         plugins.push(plugin);
-//     }
-//     if let Some(plugin) = jequi_proxy::load_plugin(config) {
-//         plugins.push(plugin);
-//     }
-//     plugins
-// }
