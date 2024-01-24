@@ -450,7 +450,9 @@ name = "jequi_go"
 version = "0.1.0"
 dependencies = [
  "jequi",
+ "jequi_proxy",
  "libloading",
+ "plugins",
  "serde",
  "serde_yaml",
  "tokio",

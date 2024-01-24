@@ -74,14 +74,15 @@ pub struct ConfigMapParser {
 }
 
 pub trait JequiConfig: Any + Send + Sync + Debug {
-    fn load(config: &Value) -> Option<Self>
+    fn load(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized;
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-pub fn load_plugin(config: &Value) -> Option<Plugin> {
-    let config = Arc::new(Config::load(config)?);
+pub fn load_plugin(config_yaml: &Value, configs: &'_ mut Vec<Option<Plugin>>) -> Option<Plugin> {
+    let config = Config::load(config_yaml, configs)?;
     Some(Plugin {
         config: config.clone(),
         request_handler: RequestHandler(None),

@@ -68,12 +68,12 @@ mod tests {
 
     use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
 
-    fn new_response<'a>(
+    fn new_response(
         headers: HeaderMap,
         status: usize,
         version: String,
-        body: &'a mut [u8],
-    ) -> HttpConn<'a, Cursor<Vec<u8>>> {
+        body: &mut [u8],
+    ) -> HttpConn<'_, Cursor<Vec<u8>>> {
         let stream: Vec<u8> = Vec::new();
         let len = body.len();
         HttpConn {

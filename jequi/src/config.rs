@@ -3,9 +3,7 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 use serde::Deserialize;
 use serde_yaml::from_reader;
 
-use crate::{
-    Config, ConfigMap, ConfigMapParser, HostConfig, JequiConfig, Plugin, RequestHandler, Value,
-};
+use crate::{Config, ConfigMap, ConfigMapParser, HostConfig, JequiConfig, Plugin, Value};
 
 impl Default for Config {
     fn default() -> Self {
@@ -18,15 +16,19 @@ impl Default for Config {
 }
 
 impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self>
+    fn load(config_yaml: &Value, _configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized,
     {
-        let conf: Config = Deserialize::deserialize(config).unwrap();
-        Some(conf)
+        let conf: Config = Deserialize::deserialize(config_yaml).unwrap();
+        Some(Arc::new(conf))
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -67,7 +69,7 @@ fn merge_config_and_load_plugins(
     if let Value::Mapping(ref mut config_parser) = config_parser {
         config_parser.insert(key_to_add.into(), value_to_add.into());
     }
-    load_plugins(&config_parser)
+    load_plugins(config_parser)
 }
 
 impl ConfigMap {
@@ -167,8 +169,8 @@ impl ConfigMap {
 impl ConfigMapParser {
     pub fn load_config(filename: &str) -> ConfigMapParser {
         let file_reader = std::fs::File::open(filename).unwrap();
-        let config_map: ConfigMapParser =
-            from_reader(file_reader).expect(&format!("Failed to parse config for `{}`", filename));
+        let config_map: ConfigMapParser = from_reader(file_reader)
+            .unwrap_or_else(|_| panic!("Failed to parse config for `{}`", filename));
 
         config_map
     }
@@ -176,7 +178,7 @@ impl ConfigMapParser {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use std::{sync::Arc, vec};
 
     use crate::{load_plugin, Config, ConfigMap, ConfigMapParser, JequiConfig, Plugin};
 
@@ -184,20 +186,24 @@ mod tests {
 
     #[test]
     fn load_config_test() {
-        let mut main_conf = ConfigMapParser::load_config(CONF_TEST_PATH);
+        let main_conf = ConfigMapParser::load_config(CONF_TEST_PATH);
 
-        let conf = Config::load(&mut main_conf.config).unwrap();
+        let conf = Config::load(&main_conf.config, &mut Vec::new()).unwrap();
 
-        let mut test_config = Config::default();
-        test_config.tls_active = true;
-        test_config.ip = "1.1.1.1".to_owned();
+        let test_config = Arc::new(Config {
+            ip: "1.1.1.1".to_owned(),
+            tls_active: true,
+            ..Default::default()
+        });
 
         assert_eq!(conf, test_config)
     }
 
     #[test]
     fn get_config_for_request_test() {
-        let config_map = ConfigMap::load(CONF_TEST_PATH, |val| vec![load_plugin(val).unwrap()]);
+        let config_map = ConfigMap::load(CONF_TEST_PATH, |val| {
+            vec![load_plugin(val, &mut Vec::new()).unwrap()]
+        });
 
         let get_config: fn(&Vec<Plugin>) -> &Config = |conf| {
             conf.get(0)

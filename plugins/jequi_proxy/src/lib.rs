@@ -10,8 +10,8 @@ use std::any::Any;
 use std::ops::Deref;
 use std::sync::Arc;
 
-pub fn load_plugin(config: &Value) -> Option<Plugin> {
-    let config = Arc::new(Config::load(config)?);
+pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Plugin> {
+    let config = Config::load(config_yaml, configs)?;
     Some(Plugin {
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(move |req, resp| {
@@ -21,19 +21,46 @@ pub fn load_plugin(config: &Value) -> Option<Plugin> {
     })
 }
 
-#[derive(Deserialize, Default, Debug, PartialEq)]
+impl PartialEq for Config {
+    fn eq(&self, other: &Self) -> bool {
+        self.proxy_address == other.proxy_address
+    }
+}
+
+#[derive(Deserialize, Default, Debug)]
 pub struct Config {
     pub proxy_address: Option<String>,
+    #[serde(skip)]
+    proxy_handlers: Option<Vec<RequestHandler>>,
 }
 
 impl Config {
     pub const fn new() -> Self {
         Config {
             proxy_address: None,
+            proxy_handlers: None,
         }
     }
 
+    pub fn add_proxy_handler(&mut self, handler: RequestHandler) {
+        if self.proxy_handlers.is_none() {
+            self.proxy_handlers = Some(Vec::new())
+        }
+        self.proxy_handlers.as_mut().unwrap().push(handler);
+    }
+
     async fn handle_request(&self, req: &mut Request, resp: &mut Response<'_>) {
+        for handle_request in self
+            .proxy_handlers
+            .iter()
+            .flat_map(|x| x)
+            .map(|x| &x.0)
+            .flat_map(|x| x)
+        {
+            if let Some(fut) = handle_request(req, resp) {
+                fut.await
+            }
+        }
         let url = http::Uri::builder()
             .scheme("https")
             .authority(self.proxy_address.as_ref().unwrap().deref())
@@ -66,18 +93,22 @@ impl Config {
 }
 
 impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self>
+    fn load(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized,
     {
-        let conf: Config = Deserialize::deserialize(config).unwrap();
+        let conf: Config = Deserialize::deserialize(config_yaml).unwrap();
         if conf == Config::default() {
             return None;
         }
 
-        Some(conf)
+        Some(Arc::new(conf))
     }
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }

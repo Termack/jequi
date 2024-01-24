@@ -10,8 +10,8 @@ use std::{
     sync::Arc,
 };
 
-pub fn load_plugin(config: &Value) -> Option<Plugin> {
-    let config = Arc::new(Config::load(config)?);
+pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Plugin> {
+    let config = Config::load(config_yaml, configs)?;
     Some(Plugin {
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(
@@ -49,7 +49,7 @@ impl Config {
         if let Some(uri_config) = self.uri.as_deref() {
             uri = uri.strip_prefix(uri_config).unwrap_or(uri);
         }
-        uri = uri.trim_start_matches("/");
+        uri = uri.trim_start_matches('/');
 
         let mut final_path = PathBuf::new();
         for p in Path::new(uri) {
@@ -78,7 +78,7 @@ impl Config {
             }
         };
 
-        match f.read(&mut resp.body_buffer) {
+        match f.read(resp.body_buffer) {
             Ok(n) => resp.body_length = n,
             Err(_) => {
                 resp.status = 404;
@@ -92,18 +92,21 @@ impl Config {
 }
 
 impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self>
+    fn load(config_yaml: &Value, _configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized,
     {
-        let conf: Config = Deserialize::deserialize(config).unwrap();
-        if conf == Config::default() || conf.static_files_path == None {
+        let conf: Config = Deserialize::deserialize(config_yaml).unwrap();
+        if conf == Config::default() || conf.static_files_path.is_none() {
             return None;
         }
 
-        Some(conf)
+        Some(Arc::new(conf))
     }
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -120,7 +123,7 @@ mod tests {
         path::Path,
     };
 
-    use jequi::{HttpConn, RawStream, RequestHandler};
+    use jequi::{HttpConn, RawStream};
 
     use crate::Config;
 

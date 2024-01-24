@@ -1,12 +1,14 @@
+#![feature(get_mut_unchecked)]
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
 use libloading::{self, Library};
+use plugins::get_plugin;
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::any::Any;
 use std::sync::Arc;
 
-pub fn load_plugin(config: &Value) -> Option<Plugin> {
-    let config = Arc::new(Config::load(config)?);
+pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Plugin> {
+    let config = Config::load(config_yaml, configs)?;
     Some(Plugin {
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(
@@ -51,14 +53,18 @@ impl Config {
             go_handle_response(req, resp);
         }
     }
+
+    pub fn handle_request_proxy(&self, req: &mut Request, resp: &mut Response) {
+        println!("heyeyeyeyeyeyeyey");
+    }
 }
 
 impl JequiConfig for Config {
-    fn load(config: &Value) -> Option<Self>
+    fn load(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized,
     {
-        let mut conf: Config = Deserialize::deserialize(config).unwrap();
+        let mut conf: Config = Deserialize::deserialize(config_yaml).unwrap();
         if conf == Config::default() {
             return None;
         }
@@ -67,9 +73,28 @@ impl JequiConfig for Config {
             let lib = Library::new(conf.go_library_path.as_ref().unwrap()).unwrap();
             conf.lib = Lib(Some(lib));
         }
+
+        let proxy_conf = get_plugin!(configs, jequi_proxy, mut Option);
+
+        let conf = Arc::new(conf);
+        if let Some(proxy_conf) = proxy_conf {
+            let conf2 = conf.clone();
+
+            proxy_conf.add_proxy_handler(RequestHandler(Some(Arc::new(
+                move |req: &mut Request, resp: &mut Response<'_>| {
+                    conf2.handle_request_proxy(req, resp);
+                    None
+                },
+            ))));
+        }
+
         Some(conf)
     }
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -120,7 +145,7 @@ mod tests {
         let mut yaml_config = Mapping::new();
         yaml_config.insert("go_library_path".into(), go_library_path.clone().into());
 
-        let conf = Config::load(&Value::Mapping(yaml_config)).unwrap();
+        let conf = Config::load(&Value::Mapping(yaml_config), &mut Vec::new()).unwrap();
 
         http.request.uri = "/file".to_string();
 

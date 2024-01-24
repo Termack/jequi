@@ -13,7 +13,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         let mut uri_index = StringIndex(None, None);
         let mut version_index = StringIndex(None, None);
 
-        match self.raw.stream.read(&mut self.raw.buffer).await {
+        match self.raw.stream.read(self.raw.buffer).await {
             Ok(0) => (),
             Ok(n) => {
                 let mut get_next = true;
@@ -25,33 +25,33 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                         if bytes[i - 1] == b'\r' {
                             index_end = i - 1
                         }
-                        if version_index.1 == None {
+                        if version_index.1.is_none() {
                             version_index.1 = Some(index_end);
                         }
                         self.raw.start = i + 1;
                         break;
                     }
                     if !get_next && bytes[i] == b' ' {
-                        if method_index.1 == None {
+                        if method_index.1.is_none() {
                             method_index.1 = Some(i);
                             get_next = true;
-                        } else if uri_index.1 == None {
+                        } else if uri_index.1.is_none() {
                             uri_index.1 = Some(i);
                             get_next = true;
-                        } else if version_index.1 == None {
+                        } else if version_index.1.is_none() {
                             version_index.1 = Some(i);
                             get_next = true;
                         }
                     } else if get_next && bytes[i] != b' ' {
-                        if method_index.0 == None {
+                        if method_index.0.is_none() {
                             method_index.0 = Some(i);
-                        } else if uri_index.0 == None {
+                        } else if uri_index.0.is_none() {
                             if bytes[i] == b'/' {
                                 uri_index.0 = Some(i);
                             } else {
                                 panic!("Uri should start with /")
                             }
-                        } else if version_index.0 == None {
+                        } else if version_index.0.is_none() {
                             version_index.0 = Some(i);
                         } else {
                             uri_index.1 = version_index.1;
@@ -65,7 +65,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
             Err(e) => panic!("{:?}", e),
         }
 
-        if version_index.1 == None {
+        if version_index.1.is_none() {
             return Err(Error::new(
                 ErrorKind::OutOfMemory,
                 "First line larger than buffer size",
@@ -227,9 +227,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
                     self.raw.end = self.raw.start + n;
                     self.raw.start = 0;
                     let (stop, buffer, err) = self.get_headers_from_bytes();
-                    if let Err(err) = err {
-                        return Err(err);
-                    }
+                    err?;
                     let buf = Vec::from(buffer);
                     self.raw.buffer[..buf.len()].copy_from_slice(&buf);
                     if stop {
@@ -280,7 +278,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
         }
         self.raw.start = 0;
         loop {
-            match self.raw.stream.read(&mut self.raw.buffer).await {
+            match self.raw.stream.read(self.raw.buffer).await {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
@@ -308,7 +306,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
     }
 }
 
-impl<'a> Request {
+impl Request {
     pub fn get_header(&self, header: &str) -> Option<&HeaderValue> {
         self.headers.get(header.to_lowercase().trim())
     }

@@ -9,5 +9,7 @@ edition = "2021"
 jequi = { path = "../../jequi" }
 serde = { version = "1.0.183", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
+plugins = { path = ".." }
+jequi_proxy = { path = "../jequi_proxy" }
 libloading = "0.8.0"
 serde_yaml = "0.9.25"
