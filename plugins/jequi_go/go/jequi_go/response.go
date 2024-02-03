@@ -1,11 +1,12 @@
 package jequi_go
 
-//#cgo LDFLAGS: -L${SRCDIR}/../../target/debug -Wl,-rpath=${SRCDIR}/../../target/debug -ljequi -ldl
+//#cgo LDFLAGS: -L${SRCDIR}/../../../../target/debug -Wl,-rpath=${SRCDIR}/../../../../target/debug -ljequi -ldl
 //#include <stdlib.h>
 //extern void set_response_header(void* resp, char* header, char* value);
 //extern void write_response_body(void* resp, char* value);
 //extern void set_response_status(void* resp, int status);
 import "C"
+
 import (
 	"unsafe"
 )

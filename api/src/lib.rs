@@ -1,4 +1,5 @@
 use jequi::{Request, Response};
+use jequi_proxy::*; // TODO: proc macro to use all plugins to load custom apis
 use std::ffi::{c_int, CStr, CString};
 use std::os::raw::c_char;
 

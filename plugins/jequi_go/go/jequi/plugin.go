@@ -10,3 +10,7 @@ import (
 func handleRequest(req jequi_go.Request, resp jequi_go.Response) {
 	handler.HandleRequest(req, resp)
 }
+
+func handleProxyRequest(req jequi_go.Request, resp jequi_go.Response) *string {
+	return handler.HandleProxyRequest(req, resp)
+}

@@ -7,8 +7,10 @@ edition = "2021"
 
 [lib]
 name = "jequi"
-crate-type = ["staticlib","dylib"]
+crate-type = ["staticlib", "dylib"]
 
 [dependencies]
 
 jequi = { path = "../jequi" }
+jequi_proxy = { path = "../plugins/jequi_proxy" }
+

@@ -37,6 +37,7 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "jequi",
+ "jequi_proxy",
 ]
 
 [[package]]
@@ -449,6 +450,7 @@ dependencies = [
 name = "jequi_go"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "jequi",
  "jequi_proxy",
  "libloading",
@@ -471,6 +473,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "tokio",
+ "trait-set",
 ]
 
 [[package]]

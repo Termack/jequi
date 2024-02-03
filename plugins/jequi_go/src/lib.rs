@@ -1,10 +1,14 @@
 #![feature(get_mut_unchecked)]
+use futures::future::FutureExt;
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
+use jequi_proxy::RequestProxyHandler;
 use libloading::{self, Library};
 use plugins::get_plugin;
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::any::Any;
+use std::ffi::CStr;
+use std::os::raw::c_char;
 use std::sync::Arc;
 
 pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Plugin> {
@@ -47,15 +51,25 @@ impl Config {
     pub fn handle_request(&self, req: &mut Request, resp: &mut Response) {
         let lib = self.lib.0.as_ref().unwrap();
         unsafe {
-            let go_handle_response: libloading::Symbol<
+            let go_handle_request: libloading::Symbol<
                 unsafe extern "C" fn(req: *mut Request, resp: *mut Response),
             > = lib.get(b"HandleRequest\0").unwrap();
-            go_handle_response(req, resp);
+            go_handle_request(req, resp);
         }
     }
 
-    pub fn handle_request_proxy(&self, req: &mut Request, resp: &mut Response) {
-        println!("heyeyeyeyeyeyeyey");
+    pub fn handle_request_proxy(&self, req: &mut Request, resp: &mut Response) -> Option<String> {
+        let lib = self.lib.0.as_ref().unwrap();
+        unsafe {
+            let go_handle_proxy_request: libloading::Symbol<
+                unsafe extern "C" fn(req: *mut Request, resp: *mut Response) -> *const c_char,
+            > = lib.get(b"HandleProxyRequest\0").unwrap();
+            let address = go_handle_proxy_request(req, resp);
+            if address.is_null() {
+                return None;
+            }
+            return Some(CStr::from_ptr(address).to_str().unwrap().to_string());
+        }
     }
 }
 
@@ -80,10 +94,10 @@ impl JequiConfig for Config {
         if let Some(proxy_conf) = proxy_conf {
             let conf2 = conf.clone();
 
-            proxy_conf.add_proxy_handler(RequestHandler(Some(Arc::new(
+            proxy_conf.add_proxy_handler(RequestProxyHandler(Some(Arc::new(
                 move |req: &mut Request, resp: &mut Response<'_>| {
-                    conf2.handle_request_proxy(req, resp);
-                    None
+                    let config = conf2.clone(); //TODO: figure out some way to avoid this clone
+                    Some(async move { config.handle_request_proxy(req, resp) }.boxed())
                 },
             ))));
         }

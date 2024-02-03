@@ -132,9 +132,10 @@ impl ConfigMap {
         let mut uri_map = &self.uri;
         if let Some(host_map) = &self.host
         && let Some(host) = host
-        && let Some(host_config) = host_map.get(host)
+        && let Some(host_config) = host_map.get(host.split(':').next().unwrap())
         {
-            config = &host_config.config;uri_map = &host_config.uri;
+            config = &host_config.config;
+            uri_map = &host_config.uri;
         }
 
         let uri_map = match uri_map {

@@ -11,5 +11,6 @@ serde = { version = "1.0.183", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 plugins = { path = ".." }
 jequi_proxy = { path = "../jequi_proxy" }
+futures = "0.3.29"
 libloading = "0.8.0"
 serde_yaml = "0.9.25"

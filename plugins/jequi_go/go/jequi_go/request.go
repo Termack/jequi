@@ -1,12 +1,14 @@
 package jequi_go
 
-//#cgo LDFLAGS: -L${SRCDIR}/../../target/debug -Wl,-rpath=${SRCDIR}/../../target/debug -ljequi -ldl
+//#cgo LDFLAGS: -L${SRCDIR}/../../../../target/debug -Wl,-rpath=${SRCDIR}/../../../../target/debug -ljequi -ldl
 //#include <stdlib.h>
 //extern char* get_request_header(void* req, char* header);
 //extern char* get_request_body(void* req);
 //extern char* get_request_uri(void* req);
+//extern void set_request_uri(void* req, char* value);
 //extern char* get_request_method(void* req);
 import "C"
+
 import (
 	"unsafe"
 )
@@ -40,6 +42,10 @@ func (r *Request) GetBody() string {
 func (r *Request) GetUri() string {
 	uri := C.get_request_uri(r.pointer)
 	return cstring_to_string(uri)
+}
+
+func (r *Request) SetUri(value string) {
+	C.set_request_uri(r.pointer, C.CString(value))
 }
 
 func (r *Request) GetMethod() string {
