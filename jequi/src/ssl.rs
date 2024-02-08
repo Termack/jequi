@@ -44,7 +44,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<'a, T> {
 
         Pin::new(&mut stream).accept().await.unwrap();
 
-        HttpConn::new(RawStream::Ssl(stream), read_buffer, body_buffer).await
+        HttpConn::new(RawStream::Ssl(stream), body_buffer).await
     }
 }
 
@@ -52,7 +52,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<'a, T> {
 mod tests {
     use std::pin::Pin;
 
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
     use tokio::net::{TcpListener, TcpStream};
 
     use openssl::ssl::{SslConnector, SslMethod};
@@ -73,7 +73,7 @@ mod tests {
             let mut buf = [0; 35];
             let req = HttpConn::ssl_new(stream, &mut buf, &mut [0; 0]).await;
 
-            if let RawStream::Ssl(mut stream) = req.raw.stream {
+            if let RawStream::Ssl(mut stream) = req.stream.into_inner() {
                 stream.write_all(b"hello").await.unwrap()
             } else {
                 panic!("Stream is not ssl")

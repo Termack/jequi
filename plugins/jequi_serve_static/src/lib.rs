@@ -130,12 +130,7 @@ mod tests {
     #[tokio::test]
     async fn handle_static_files_test() {
         let mut buf = [0; 35];
-        let mut http = HttpConn::new(
-            RawStream::Normal(Cursor::new(vec![])),
-            &mut [0; 0],
-            &mut buf,
-        )
-        .await;
+        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])), &mut buf).await;
 
         // Normal test
         http.request.uri = "/file".to_string();

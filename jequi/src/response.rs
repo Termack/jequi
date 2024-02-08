@@ -20,14 +20,13 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
             headers += &header;
         }
         headers += "\n";
-        self.raw.stream.write_all(headers.as_bytes()).await.unwrap();
+        self.stream.write_all(headers.as_bytes()).await?;
         if content_length > 0 {
-            self.raw
-                .stream
+            self.stream
                 .write_all(&self.response.body_buffer[..content_length])
-                .await
-                .unwrap();
+                .await?;
         }
+        self.stream.flush().await?;
         Ok(())
     }
 }
@@ -64,9 +63,9 @@ mod tests {
     use std::io::Cursor;
 
     use http::HeaderMap;
-    use tokio::io::AsyncReadExt;
+    use tokio::io::{AsyncReadExt, BufStream};
 
-    use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
+    use crate::{HttpConn, RawStream, Request, Response};
 
     fn new_response(
         headers: HeaderMap,
@@ -77,12 +76,7 @@ mod tests {
         let stream: Vec<u8> = Vec::new();
         let len = body.len();
         HttpConn {
-            raw: RawHTTP {
-                stream: RawStream::Normal(Cursor::new(stream)),
-                buffer: &mut [],
-                start: 0,
-                end: 0,
-            },
+            stream: BufStream::new(RawStream::Normal(Cursor::new(stream))),
             version,
             request: Request {
                 method: String::new(),
@@ -171,13 +165,13 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         for (i, mut r) in responses_in.into_iter().enumerate() {
             r.write_response().await.unwrap();
 
-            let buf = &mut [0; 1024];
-            let mut n = 0;
-            if let RawStream::Normal(mut stream) = r.raw.stream {
-                stream.set_position(0);
+            let mut buf = Vec::new();
 
-                n = stream.read(buf).await.unwrap();
+            if let RawStream::Normal(stream) = r.stream.get_mut() {
+                stream.set_position(0)
             }
+
+            let n = r.stream.read_to_end(&mut buf).await.unwrap();
 
             assert_eq!(
                 String::from_utf8_lossy(&buf[..n]),
@@ -208,8 +202,7 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     async fn test_write_body() {
         let stream = Cursor::new(Vec::new());
         let mut body_buffer = [0; 1024];
-        let mut http =
-            HttpConn::new(RawStream::Normal(stream), &mut [0; 0], &mut body_buffer).await;
+        let mut http = HttpConn::new(RawStream::Normal(stream), &mut body_buffer).await;
         let resp = &mut http.response;
         resp.write_body(b"hello").unwrap();
         assert_eq!(b"hello", &resp.body_buffer[..resp.body_length]);

@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 #![feature(io_error_more)]
 #![feature(option_get_or_insert_default)]
+#![feature(byte_slice_trim_ascii)]
 pub mod config;
 pub mod request;
 pub mod response;
@@ -11,6 +12,7 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::{self, Debug},
+    io::{BufReader, BufWriter},
     sync::Arc,
 };
 
@@ -18,7 +20,7 @@ use futures::future::BoxFuture;
 use http::HeaderMap;
 use serde::Deserialize;
 use serde_yaml::Value;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio_openssl::SslStream;
 use trait_set::trait_set;
 
@@ -102,19 +104,12 @@ pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {
     Normal(T),
 }
 
-pub struct RawHTTP<'a, T: AsyncRead + AsyncWrite + Unpin> {
-    pub stream: RawStream<T>,
-    pub buffer: &'a mut [u8],
-    pub start: usize,
-    pub end: usize,
-}
-
 pub struct Request {
     pub method: String,
     pub uri: String,
     pub headers: HeaderMap,
     pub host: Option<String>,
-    pub body: Option<String>,
+    pub body: Option<Vec<u8>>,
 }
 
 #[repr(C)]
@@ -126,7 +121,7 @@ pub struct Response<'a> {
 }
 
 pub struct HttpConn<'a, T: AsyncRead + AsyncWrite + Unpin> {
-    pub raw: RawHTTP<'a, T>,
+    pub stream: BufStream<RawStream<T>>,
     pub version: String,
     pub request: Request,
     pub response: Response<'a>,

@@ -50,7 +50,7 @@ pub unsafe extern "C" fn get_request_header(
 #[no_mangle]
 pub unsafe extern "C" fn get_request_body(req: *mut Request) -> *const c_char {
     let req = unsafe { get_object_from_pointer(req) };
-    CString::new(req.get_body().unwrap_or(&"".to_string()).as_str())
+    CString::new(req.get_body().unwrap_or(&[]))
         .unwrap()
         .into_raw()
 }

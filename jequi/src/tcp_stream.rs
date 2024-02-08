@@ -4,9 +4,9 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadBuf};
 
-use crate::{HttpConn, RawHTTP, RawStream, Request, Response};
+use crate::{HttpConn, RawStream, Request, Response};
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for RawStream<S> {
     fn poll_read(
@@ -67,18 +67,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RawStream<S> {
 }
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
-    pub async fn new(
-        stream: RawStream<T>,
-        read_buffer: &'a mut [u8],
-        body_buffer: &'a mut [u8],
-    ) -> HttpConn<'a, T> {
+    pub async fn new(stream: RawStream<T>, body_buffer: &'a mut [u8]) -> HttpConn<'a, T> {
         HttpConn {
-            raw: RawHTTP {
-                stream,
-                buffer: read_buffer,
-                start: 0,
-                end: 0,
-            },
+            stream: BufStream::new(stream),
             version: String::new(),
             request: Request {
                 method: String::new(),

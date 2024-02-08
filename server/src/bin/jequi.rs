@@ -21,12 +21,7 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     if conf.tls_active {
         http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer).await;
     } else {
-        http = HttpConn::new(
-            RawStream::Normal(stream),
-            &mut read_buffer,
-            &mut body_buffer,
-        )
-        .await;
+        http = HttpConn::new(RawStream::Normal(stream), &mut body_buffer).await;
     }
 
     http.parse_first_line().await.unwrap();

@@ -11,8 +11,8 @@ async fn parse_first_line_test() {
     let requests_in: Vec<Vec<u8>> = vec![
         Vec::from("GET / HTTP/1.1 \n"),
         Vec::from("POST /bla HTTP/2.0\n"),
-        Vec::from("PUT  /ab cd HTTP/1.2\n"),
-        Vec::from("  GET  / a adfsdab  HTTP/1.1 \n"),
+        Vec::from("PUT  /abcd HTTP/1.2\n"),
+        Vec::from("GET  /aadfsdab  HTTP/1.1 \n"),
     ];
 
     #[derive(Debug, PartialEq)]
@@ -20,66 +20,46 @@ async fn parse_first_line_test() {
         method: String,
         uri: String,
         version: String,
-        index: usize,
     }
 
-    fn new_result(method: String, uri: String, version: String, index: usize) -> Result {
+    fn new_result(method: String, uri: String, version: String) -> Result {
         Result {
             method,
             uri,
             version,
-            index,
         }
     }
 
     let expected_results = vec![
-        new_result(
-            "GET".to_string(),
-            "/".to_string(),
-            "HTTP/1.1".to_string(),
-            16,
-        ),
+        new_result("GET".to_string(), "/".to_string(), "HTTP/1.1".to_string()),
         new_result(
             "POST".to_string(),
             "/bla".to_string(),
             "HTTP/2.0".to_string(),
-            19,
         ),
         new_result(
             "PUT".to_string(),
-            "/ab cd".to_string(),
+            "/abcd".to_string(),
             "HTTP/1.2".to_string(),
-            21,
         ),
         new_result(
             "GET".to_string(),
-            "/ a adfsdab".to_string(),
+            "/aadfsdab".to_string(),
             "HTTP/1.1".to_string(),
-            30,
         ),
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
         let mut buf = [0; 35];
-        let mut req = HttpConn::new(
-            RawStream::Normal(Cursor::new(r.clone())),
-            &mut buf,
-            &mut [0; 0],
-        )
-        .await;
+        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())), &mut [0; 0]).await;
 
         let err = req.parse_first_line().await;
 
-        err.unwrap();
+        err.expect(&format!("{:?}", String::from_utf8_lossy(r)));
 
         assert_eq!(
             expected_results[i],
-            new_result(
-                req.request.method,
-                req.request.uri,
-                req.version,
-                req.raw.start
-            ),
+            new_result(req.request.method, req.request.uri, req.version,),
             "Testing parse for line: {}",
             String::from_utf8_lossy(r)
         )
@@ -90,7 +70,7 @@ async fn parse_first_line_test() {
 async fn parse_headers_test() {
     let requests_in: Vec<Vec<u8>> = vec![
         b"\
-GET / HTTP/1.1 
+GET / HTTP/1.1
 Host: example.com
 Content-Type: application/json
 
@@ -111,7 +91,7 @@ Cookies: aa=bb
 "
         .to_vec(),
         b"\
-  GET  / a adfsdab  HTTP/1.1 
+  GET  / a adfsdab  HTTP/1.1
 Bla: bla
 Ble: ble
 Header: haaa
@@ -120,7 +100,7 @@ Wowo: 10034mc amk
 "
         .to_vec(),
         b"\
-GET / HTTP/1.1 
+GET / HTTP/1.1
 Content-Length: 11
 
 hello world"
@@ -154,12 +134,7 @@ hello world"
 
     for (i, r) in requests_in.iter().enumerate() {
         let mut buf = [0; 35];
-        let mut req = HttpConn::new(
-            RawStream::Normal(Cursor::new(r.clone())),
-            &mut buf,
-            &mut [0; 0],
-        )
-        .await;
+        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())), &mut [0; 0]).await;
 
         req.parse_first_line().await.unwrap();
 
@@ -178,13 +153,13 @@ hello world"
 async fn read_body_test() {
     let requests_in: Vec<Vec<u8>> = vec![
         b"\
-GET / HTTP/1.1 
+GET / HTTP/1.1
 Content-Length: 11
 
 hello world"
             .to_vec(),
         b"\
-GET / HTTP/1.1 
+GET / HTTP/1.1
 Content-Length: 0
 
 hello world"
@@ -217,29 +192,23 @@ r
         .to_vec(),
     ];
 
-    let expected_results: Vec<Result<String>> = vec![
-        Ok("hello world".to_string()),
-        Ok("".to_string()),
-        Ok("12345".to_string()),
+    let expected_results: Vec<Result<Vec<u8>>> = vec![
+        Ok("hello world".into()),
+        Ok("".into()),
+        Ok("12345".into()),
         Err(Error::new(
-            ErrorKind::InvalidData,
-            "Content length and body size dont match",
+            ErrorKind::UnexpectedEof,
+            "early eof",
         )),
         Err(Error::new(
             ErrorKind::Other,
             format!("Cant convert content length to int: invalid digit found in string"),
         )),
-        Ok("vpm1DH8sIat11ezv8GulW93nT7uTxVF5RH58WH7INSMvvzqXSd3O6Np11MOcI8gVXVpKOSwNsCQusuMyfjZ5eXC6eD7sQdRal\nr\n".to_string()),
+        Ok("vpm1DH8sIat11ezv8GulW93nT7uTxVF5RH58WH7INSMvvzqXSd3O6Np11MOcI8gVXVpKOSwNsCQusuMyfjZ5eXC6eD7sQdRal\nr\n".into()),
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut buf = [0; 40];
-        let mut req = HttpConn::new(
-            RawStream::Normal(Cursor::new(r.clone())),
-            &mut buf,
-            &mut [0; 0],
-        )
-        .await;
+        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())), &mut [0; 0]).await;
 
         req.parse_first_line().await.unwrap();
 

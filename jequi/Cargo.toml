@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 name = "jequi"
 crate-type = ["lib"]
 
 [dependencies]
+bytes = "1.5.0"
 serde_yaml = "0.9.25"
 serde = { version = "1.0.183", features = ["derive"] }
 openssl = "0.10.41"

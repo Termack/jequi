@@ -129,12 +129,7 @@ mod tests {
     #[tokio::test]
     async fn handle_go_request() {
         let mut buf = [0; 35];
-        let mut http = HttpConn::new(
-            RawStream::Normal(Cursor::new(vec![])),
-            &mut [0; 0],
-            &mut buf,
-        )
-        .await;
+        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])), &mut buf).await;
 
         let output = Command::new("go")
             .args([
