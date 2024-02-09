@@ -4,15 +4,15 @@ use std::{
 };
 
 use crate::{HttpConn, Response};
-use http::{HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
+impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
     pub async fn write_response(&mut self) -> Result<()> {
         let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);
         headers += &status_line;
-        let content_length = self.response.body_length;
+        let content_length = self.response.body_buffer.len();
         self.response
             .set_header("content-length", &content_length.to_string());
         for (key, value) in &self.response.headers {
@@ -31,7 +31,15 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
     }
 }
 
-impl<'a> Response<'a> {
+impl Response {
+    pub fn new() -> Response {
+        Response {
+            status: 0,
+            headers: HeaderMap::new(),
+            body_buffer: Vec::new(),
+        }
+    }
+
     pub fn set_header(&mut self, header: &str, value: &str) -> Option<HeaderValue> {
         self.headers.insert(
             header.trim().to_lowercase().parse::<HeaderName>().unwrap(),
@@ -43,18 +51,15 @@ impl<'a> Response<'a> {
         self.headers.get(header.to_lowercase().trim())
     }
 
-    pub fn write_body(&mut self, bytes: &[u8]) -> Result<usize> {
-        let body_buffer = &mut self.body_buffer[self.body_length..];
-        let length = cmp::min(bytes.len(), body_buffer.len());
-        body_buffer[..length].copy_from_slice(&bytes[..length]);
-        self.body_length += length;
-        if length != bytes.len() {
-            return Err(Error::new(
-                ErrorKind::FileTooLarge,
-                "not all bytes were written",
-            ));
-        }
-        Ok(length)
+    pub fn write_body(&mut self, bytes: &[u8]) -> Result<()> {
+        self.body_buffer.extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -71,10 +76,9 @@ mod tests {
         headers: HeaderMap,
         status: usize,
         version: String,
-        body: &mut [u8],
-    ) -> HttpConn<'_, Cursor<Vec<u8>>> {
+        body: Vec<u8>,
+    ) -> HttpConn<Cursor<Vec<u8>>> {
         let stream: Vec<u8> = Vec::new();
-        let len = body.len();
         HttpConn {
             stream: BufStream::new(RawStream::Normal(Cursor::new(stream))),
             version,
@@ -89,14 +93,13 @@ mod tests {
                 status,
                 headers,
                 body_buffer: body,
-                body_length: len,
             },
         }
     }
 
     #[tokio::test]
     async fn response_write_test() {
-        let mut bodies = (
+        let bodies = (
             Vec::from("hello world"),
             Vec::from("test2 2 2 2 2"),
             Vec::from("blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n".to_owned())
@@ -110,7 +113,7 @@ mod tests {
                 ]),
                 301,
                 "HTTP/1.1".to_string(),
-                &mut bodies.0,
+                bodies.0,
             ),
             new_response(
                 HeaderMap::from_iter([
@@ -122,7 +125,7 @@ mod tests {
                 ]),
                 200,
                 "HTTP/2".to_string(),
-                &mut bodies.1,
+                bodies.1,
             ),
             new_response(
                 HeaderMap::from_iter([
@@ -135,7 +138,7 @@ mod tests {
                 ]),
                 404,
                 "HTTP/1".to_string(),
-                &mut bodies.2,
+                bodies.2,
             ),
         ];
 
@@ -186,7 +189,7 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             HeaderMap::from_iter([("server".parse().unwrap(), "not-jequi".parse().unwrap())]),
             0,
             String::new(),
-            &mut [],
+            Vec::new(),
         );
 
         http.response.set_header("server", "jequi");
@@ -201,12 +204,11 @@ blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     #[tokio::test]
     async fn test_write_body() {
         let stream = Cursor::new(Vec::new());
-        let mut body_buffer = [0; 1024];
-        let mut http = HttpConn::new(RawStream::Normal(stream), &mut body_buffer).await;
+        let mut http = HttpConn::new(RawStream::Normal(stream));
         let resp = &mut http.response;
         resp.write_body(b"hello").unwrap();
-        assert_eq!(b"hello", &resp.body_buffer[..resp.body_length]);
+        assert_eq!(b"hello", &resp.body_buffer[..]);
         resp.write_body(b" world").unwrap();
-        assert_eq!(b"hello world", &resp.body_buffer[..resp.body_length]);
+        assert_eq!(b"hello world", &resp.body_buffer[..]);
     }
 }

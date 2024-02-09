@@ -1,8 +1,10 @@
+#![feature(let_chains)]
 use chrono::Utc;
-use jequi::{Config, ConfigMap, HttpConn, RawStream};
+use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
 use plugins::{get_plugin, load_plugins};
 use std::process;
 use std::{fs, io::ErrorKind, sync::Arc};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},
@@ -12,21 +14,15 @@ use tokio::{
 
 load_plugins!();
 
-async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
-    let mut read_buffer = [0; 1024];
-    let mut body_buffer = [0; 1024 * 256];
-    let mut http: HttpConn<'_, TcpStream>;
-    let plugin_list = &config_map.config;
-    let conf = get_plugin!(plugin_list, jequi);
-    if conf.tls_active {
-        http = HttpConn::ssl_new(stream, &mut read_buffer, &mut body_buffer).await;
-    } else {
-        http = HttpConn::new(RawStream::Normal(stream), &mut body_buffer).await;
-    }
-
+async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
+    http: &mut HttpConn<T>,
+    config_map: Arc<ConfigMap>,
+) {
+    println!("new request");
     http.parse_first_line().await.unwrap();
 
     http.parse_headers().await.unwrap();
+    println!("1");
 
     // TODO: Read the body only if needed
     match http.read_body().await {
@@ -35,11 +31,15 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
         Err(e) => panic!("Error reading request body: {}", e),
     };
 
+    println!("2");
+
     http.response.set_header("server", "jequi");
     http.response.set_header(
         "date",
         &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
     );
+
+    println!("3");
 
     let config = config_map.get_config_for_request(http.request.host.as_deref(), &http.request.uri);
 
@@ -49,6 +49,8 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
         }
     }
 
+    println!("4");
+
     http.response.headers.remove("transfer-encoding");
 
     if http.response.status == 0 {
@@ -56,6 +58,27 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     }
 
     http.write_response().await.unwrap();
+}
+
+async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
+    println!("new connection");
+    let mut http: HttpConn<TcpStream>;
+    let plugin_list = &config_map.config;
+    let conf = get_plugin!(plugin_list, jequi);
+    if conf.tls_active {
+        http = HttpConn::ssl_new(stream).await;
+    } else {
+        http = HttpConn::new(RawStream::Normal(stream));
+    }
+
+    handle_request(&mut http, config_map.clone()).await;
+    if let Some(connection) = http.request.headers.get("connection") && connection.to_str().unwrap().to_lowercase() == "keep-alive" {
+        loop {
+            http.request = Request::new();
+            http.response = Response::new();
+            handle_request(&mut http, config_map.clone()).await;
+        }
+    }
 }
 
 async fn listen_reload(config_map: Arc<RwLock<Arc<ConfigMap>>>) {

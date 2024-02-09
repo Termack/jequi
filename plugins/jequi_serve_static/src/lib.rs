@@ -15,7 +15,7 @@ pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Op
     Some(Plugin {
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(
-            move |req: &mut Request, resp: &mut Response<'_>| {
+            move |req: &mut Request, resp: &mut Response| {
                 config.handle_request(req, resp);
                 None
             },
@@ -66,8 +66,8 @@ impl Config {
 
         final_path = root.join(final_path);
 
-        let mut f = match File::open(final_path) {
-            Ok(f) => f,
+        match std::fs::read(final_path) {
+            Ok(content) => resp.write_body(&content).unwrap(),
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 resp.status = 403;
                 return;
@@ -77,15 +77,6 @@ impl Config {
                 return;
             }
         };
-
-        match f.read(resp.body_buffer) {
-            Ok(n) => resp.body_length = n,
-            Err(_) => {
-                resp.status = 404;
-                resp.body_length = 0;
-                return;
-            }
-        }
 
         resp.status = 200;
     }
@@ -129,8 +120,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_static_files_test() {
-        let mut buf = [0; 35];
-        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])), &mut buf).await;
+        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])));
 
         // Normal test
         http.request.uri = "/file".to_string();
@@ -141,62 +131,53 @@ mod tests {
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
-        assert_eq!(
-            &http.response.body_buffer[..http.response.body_length],
-            b"hello"
-        );
+        assert_eq!(&http.response.body_buffer[..], b"hello");
 
         // lfi test
         http.request.uri = "/file/./../../file".to_string();
-        http.response.body_length = 0;
+        http.response.body_buffer.truncate(0);
 
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
-        assert_eq!(
-            &http.response.body_buffer[..http.response.body_length],
-            b"hello"
-        );
+        assert_eq!(&http.response.body_buffer[..], b"hello");
 
         // Forbidden test
         let path = format!("{}noperm", TEST_PATH);
         let path = Path::new(&path);
 
         if !path.exists() {
-            File::create(&path).unwrap();
+            File::create(path).unwrap();
         }
 
         fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
 
         http.request.uri = "/noperm".to_string();
-        http.response.body_length = 0;
+        http.response.body_buffer.truncate(0);
 
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 403);
-        assert_eq!(&http.response.body_buffer[..http.response.body_length], b"");
+        assert_eq!(&http.response.body_buffer[..], b"");
 
         // Notfound test
         http.request.uri = "/notfound".to_string();
-        http.response.body_length = 0;
+        http.response.body_buffer.truncate(0);
 
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 404);
-        assert_eq!(&http.response.body_buffer[..http.response.body_length], b"");
+        assert_eq!(&http.response.body_buffer[..], b"");
 
         // Uri config test
         conf.uri = Some("/uri".to_string());
 
         http.request.uri = "/uri/file".to_string();
-        http.response.body_length = 0;
+        http.response.body_buffer.truncate(0);
 
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
-        assert_eq!(
-            &http.response.body_buffer[..http.response.body_length],
-            b"hello"
-        );
+        assert_eq!(&http.response.body_buffer[..], b"hello");
     }
 }

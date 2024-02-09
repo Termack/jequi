@@ -14,12 +14,8 @@ static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
 static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
-impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<'a, T> {
-    pub async fn ssl_new(
-        stream: T,
-        read_buffer: &'a mut [u8],
-        body_buffer: &'a mut [u8],
-    ) -> HttpConn<'a, T> {
+impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<T> {
+    pub async fn ssl_new(stream: T) -> HttpConn<T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         acceptor.set_servername_callback(
             |ssl_ref: &mut SslRef, _ssl_alert: &mut SslAlert| -> Result<(), SniError> {
@@ -44,7 +40,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<'a, T> {
 
         Pin::new(&mut stream).accept().await.unwrap();
 
-        HttpConn::new(RawStream::Ssl(stream), body_buffer).await
+        HttpConn::new(RawStream::Ssl(stream))
     }
 }
 
@@ -52,7 +48,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<'a, T> {
 mod tests {
     use std::pin::Pin;
 
-    use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
 
     use openssl::ssl::{SslConnector, SslMethod};
@@ -70,8 +66,7 @@ mod tests {
         tokio::spawn(async move {
             let stream = listener.accept().await.unwrap().0;
 
-            let mut buf = [0; 35];
-            let req = HttpConn::ssl_new(stream, &mut buf, &mut [0; 0]).await;
+            let req = HttpConn::ssl_new(stream).await;
 
             if let RawStream::Ssl(mut stream) = req.stream.into_inner() {
                 stream.write_all(b"hello").await.unwrap()

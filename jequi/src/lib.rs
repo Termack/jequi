@@ -12,7 +12,6 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::{self, Debug},
-    io::{BufReader, BufWriter},
     sync::Arc,
 };
 
@@ -25,7 +24,7 @@ use tokio_openssl::SslStream;
 use trait_set::trait_set;
 
 trait_set! {
-    pub trait RequestHandlerFn = for<'a> Fn(&'a mut Request, &'a mut Response<'_>) -> Option<BoxFuture<'a, ()>>
+    pub trait RequestHandlerFn = for<'a> Fn(&'a mut Request, &'a mut Response) -> Option<BoxFuture<'a, ()>>
 }
 
 pub struct RequestHandler(pub Option<Arc<dyn RequestHandlerFn + Send + Sync>>);
@@ -113,16 +112,15 @@ pub struct Request {
 }
 
 #[repr(C)]
-pub struct Response<'a> {
+pub struct Response {
     pub status: usize,
     pub headers: HeaderMap,
-    pub body_buffer: &'a mut [u8],
-    pub body_length: usize,
+    pub body_buffer: Vec<u8>,
 }
 
-pub struct HttpConn<'a, T: AsyncRead + AsyncWrite + Unpin> {
+pub struct HttpConn<T: AsyncRead + AsyncWrite + Unpin> {
     pub stream: BufStream<RawStream<T>>,
     pub version: String,
     pub request: Request,
-    pub response: Response<'a>,
+    pub response: Response,
 }

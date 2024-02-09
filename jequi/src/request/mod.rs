@@ -1,10 +1,10 @@
-use http::{HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use std::io::{Error, ErrorKind, Result};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite};
 
 use crate::{HttpConn, Request};
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
+impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
     pub async fn parse_first_line(&mut self) -> Result<()> {
         let mut method = Vec::new();
         let mut uri = Vec::new();
@@ -81,12 +81,28 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
 }
 
 impl Request {
+    pub fn new() -> Request {
+        Request {
+            method: String::new(),
+            uri: String::new(),
+            headers: HeaderMap::new(),
+            host: None,
+            body: None,
+        }
+    }
+
     pub fn get_header(&self, header: &str) -> Option<&HeaderValue> {
         self.headers.get(header.to_lowercase().trim())
     }
 
     pub fn get_body(&self) -> Option<&[u8]> {
         self.body.as_deref()
+    }
+}
+
+impl Default for Request {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -23,7 +23,7 @@ pub unsafe extern "C" fn set_request_uri(req: *mut Request, value: *const c_char
         .unwrap()
         .to_string();
     if !uri.starts_with('/') {
-        uri.insert_str(0, "/");
+        uri.insert(0, '/');
     }
     req.uri = uri;
 }
@@ -46,7 +46,7 @@ impl PartialEq for Config {
 }
 
 trait_set! {
-    pub trait RequestProxyHandlerFn = for<'a> Fn(&'a mut Request, &'a mut Response<'_>) -> Option<BoxFuture<'a, Option<String>>>
+    pub trait RequestProxyHandlerFn = for<'a> Fn(&'a mut Request, &'a mut Response) -> Option<BoxFuture<'a, Option<String>>>
 }
 
 pub struct RequestProxyHandler(pub Option<Arc<dyn RequestProxyHandlerFn + Send + Sync>>);
@@ -83,7 +83,7 @@ impl Config {
         self.proxy_handlers.as_mut().unwrap().push(handler);
     }
 
-    async fn handle_request(&self, req: &mut Request, resp: &mut Response<'_>) {
+    async fn handle_request(&self, req: &mut Request, resp: &mut Response) {
         let mut proxy_address = None;
         for handle_request in self
             .proxy_handlers
@@ -123,9 +123,7 @@ impl Config {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);
         let request = request_builder.body(body).unwrap();
-        println!("{:?}", request);
         let response = client.request(request).await.unwrap();
-        println!("{:?}", response);
         resp.headers = response.headers().clone();
         resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
             .unwrap();
@@ -133,7 +131,7 @@ impl Config {
 }
 
 impl JequiConfig for Config {
-    fn load(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
+    fn load(config_yaml: &Value, _configs: &mut Vec<Option<Plugin>>) -> Option<Arc<Self>>
     where
         Self: Sized,
     {

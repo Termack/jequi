@@ -1,4 +1,3 @@
-use http::HeaderMap;
 use std::{
     io::{IoSlice, Result},
     pin::Pin,
@@ -66,24 +65,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RawStream<S> {
     }
 }
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<'a, T> {
-    pub async fn new(stream: RawStream<T>, body_buffer: &'a mut [u8]) -> HttpConn<'a, T> {
+impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+    pub fn new(stream: RawStream<T>) -> HttpConn<T> {
         HttpConn {
             stream: BufStream::new(stream),
             version: String::new(),
-            request: Request {
-                method: String::new(),
-                uri: String::new(),
-                headers: HeaderMap::new(),
-                host: None,
-                body: None,
-            },
-            response: Response {
-                status: 0,
-                headers: HeaderMap::new(),
-                body_buffer,
-                body_length: 0,
-            },
+            request: Request::new(),
+            response: Response::new(),
         }
     }
 }
