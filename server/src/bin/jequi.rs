@@ -4,7 +4,7 @@ use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
 use plugins::{get_plugin, load_plugins};
 use std::process;
 use std::{fs, io::ErrorKind, sync::Arc};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},
@@ -18,28 +18,22 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
     http: &mut HttpConn<T>,
     config_map: Arc<ConfigMap>,
 ) {
-    println!("new request");
     http.parse_first_line().await.unwrap();
 
     http.parse_headers().await.unwrap();
-    println!("1");
 
-    // TODO: Read the body only if needed
+    // TODO: Read the body only if needed (remember to consume stream if body not read)
     match http.read_body().await {
         Ok(_) => (),
         Err(ref e) if e.kind() == ErrorKind::NotFound => (),
         Err(e) => panic!("Error reading request body: {}", e),
     };
 
-    println!("2");
-
     http.response.set_header("server", "jequi");
     http.response.set_header(
         "date",
         &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
     );
-
-    println!("3");
 
     let config = config_map.get_config_for_request(http.request.host.as_deref(), &http.request.uri);
 
@@ -48,8 +42,6 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
             fut.await
         }
     }
-
-    println!("4");
 
     http.response.headers.remove("transfer-encoding");
 
@@ -61,7 +53,6 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
 }
 
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
-    println!("new connection");
     let mut http: HttpConn<TcpStream>;
     let plugin_list = &config_map.config;
     let conf = get_plugin!(plugin_list, jequi);

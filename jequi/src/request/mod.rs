@@ -5,15 +5,23 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite};
 use crate::{HttpConn, Request};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+    async fn read_until_handle_eof(&mut self, byte: u8, buf: &'a mut Vec<u8>) -> Result<()> {
+        let n = self.stream.read_until(byte, buf).await?;
+        if n == 0 {
+            return Err(Error::new(ErrorKind::UnexpectedEof, "unexpected eof"));
+        }
+        Ok(())
+    }
+
     pub async fn parse_first_line(&mut self) -> Result<()> {
         let mut method = Vec::new();
         let mut uri = Vec::new();
         let mut version = Vec::new();
-        self.stream.read_until(b' ', &mut method).await?;
+        self.read_until_handle_eof(b' ', &mut method).await?;
         while uri.is_empty() || uri == [b' '] {
-            self.stream.read_until(b' ', &mut uri).await?;
+            self.read_until_handle_eof(b' ', &mut uri).await?;
         }
-        self.stream.read_until(b'\n', &mut version).await?;
+        self.read_until_handle_eof(b'\n', &mut version).await?;
 
         self.request.method = String::from_utf8_lossy(&method[..method.len() - 1]).to_string();
         self.request.uri = String::from_utf8_lossy(uri.trim_ascii()).to_string();
@@ -38,8 +46,8 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
             }
             let mut header = vec![next];
             let mut value = Vec::new();
-            self.stream.read_until(b':', &mut header).await?;
-            self.stream.read_until(b'\n', &mut value).await?;
+            self.read_until_handle_eof(b':', &mut header).await?;
+            self.read_until_handle_eof(b'\n', &mut value).await?;
 
             let header = String::from_utf8_lossy(header[..header.len() - 1].trim_ascii_start())
                 .to_lowercase();

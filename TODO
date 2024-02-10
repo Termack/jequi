@@ -1,4 +1,3 @@
-fix keepalive getting stuck (curl https://jequi.com:7878/ -vk -H "Connection: keep-alive")
 HTTP2 and some other things in http1 (like keepalive, chunked, gzip)
 Add proxy and jequi_go proxy tests
 Add plugin to generate certificate

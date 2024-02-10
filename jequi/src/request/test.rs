@@ -83,14 +83,14 @@ Accept-Encoding: gzip\r
 "
         .to_vec(),
         b"\
-PUT  /ab cd HTTP/1.2
+PUT  /abcd HTTP/1.2
 Host: host.com
 Cookies: aa=bb
 
 "
         .to_vec(),
         b"\
-  GET  / a adfsdab  HTTP/1.1
+  GET  /aadfsdab  HTTP/1.1
 Bla: bla
 Ble: ble
 Header: haaa
