@@ -43,8 +43,6 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
         }
     }
 
-    http.response.headers.remove("transfer-encoding");
-
     if http.response.status == 0 {
         http.response.status = 200;
     }

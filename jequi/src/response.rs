@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{HttpConn, Response};
-use http::{HeaderMap, HeaderName, HeaderValue};
+use http::{header, HeaderMap, HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
@@ -12,20 +12,19 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
         let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);
         headers += &status_line;
-        let content_length = self.response.body_buffer.len();
-        self.response
-            .set_header("content-length", &content_length.to_string());
+        if let Some(encoding) = self.response.get_header(header::TRANSFER_ENCODING.as_str()) && encoding.to_str().unwrap().trim().eq_ignore_ascii_case("chunked") {
+        } else {
+            let content_length = self.response.body_buffer.len();
+            self.response
+                .set_header("content-length", &content_length.to_string());
+        }
         for (key, value) in &self.response.headers {
             let header = format!("{}: {}\n", key, value.to_str().unwrap());
             headers += &header;
         }
         headers += "\n";
         self.stream.write_all(headers.as_bytes()).await?;
-        if content_length > 0 {
-            self.stream
-                .write_all(&self.response.body_buffer[..content_length])
-                .await?;
-        }
+        self.stream.write_all(&self.response.body_buffer).await?;
         self.stream.flush().await?;
         Ok(())
     }
