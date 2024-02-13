@@ -15,6 +15,7 @@ use tokio::{
 load_plugins!();
 
 async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
+    conf: &Config,
     http: &mut HttpConn<T>,
     config_map: Arc<ConfigMap>,
 ) {
@@ -47,7 +48,7 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
         http.response.status = 200;
     }
 
-    http.write_response().await.unwrap();
+    http.write_response(conf.chunk_size).await.unwrap();
 }
 
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
@@ -60,12 +61,12 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
         http = HttpConn::new(RawStream::Normal(stream));
     }
 
-    handle_request(&mut http, config_map.clone()).await;
+    handle_request(conf, &mut http, config_map.clone()).await;
     if let Some(connection) = http.request.headers.get("connection") && connection.to_str().unwrap().to_lowercase() == "keep-alive" {
         loop {
             http.request = Request::new();
             http.response = Response::new();
-            handle_request(&mut http, config_map.clone()).await;
+            handle_request(conf, &mut http, config_map.clone()).await;
         }
     }
 }

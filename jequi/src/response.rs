@@ -8,15 +8,22 @@ use http::{header, HeaderMap, HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
-    pub async fn write_response(&mut self) -> Result<()> {
+    pub async fn write_response(&mut self, chunk_size: usize) -> Result<()> {
         let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);
         headers += &status_line;
-        if let Some(encoding) = self.response.get_header(header::TRANSFER_ENCODING.as_str()) && encoding.to_str().unwrap().trim().eq_ignore_ascii_case("chunked") {
-        } else {
-            let content_length = self.response.body_buffer.len();
+        let content_length = self.response.body_buffer.len();
+        // TODO: add more checks to see if response should be chunked (like checking content-type)
+        let chunked = content_length > chunk_size;
+        if chunked {
+            self.response.remove_header(header::CONTENT_LENGTH.as_str());
             self.response
-                .set_header("content-length", &content_length.to_string());
+                .set_header(header::TRANSFER_ENCODING.as_str(), "chunked");
+        } else {
+            self.response
+                .remove_header(header::TRANSFER_ENCODING.as_str());
+            self.response
+                .set_header(header::CONTENT_LENGTH.as_str(), &content_length.to_string());
         }
         for (key, value) in &self.response.headers {
             let header = format!("{}: {}\n", key, value.to_str().unwrap());
@@ -24,8 +31,23 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
         }
         headers += "\n";
         self.stream.write_all(headers.as_bytes()).await?;
-        self.stream.write_all(&self.response.body_buffer).await?;
-        self.stream.flush().await?;
+        if chunked {
+            for chunk in self.response.body_buffer.chunks(chunk_size) {
+                let chunk = [
+                    format!("{:x}\r\n", chunk.len()).as_bytes(),
+                    &chunk,
+                    "\r\n".as_bytes(),
+                ]
+                .concat();
+                self.stream.write_all(&chunk).await?;
+                self.stream.flush().await?;
+            }
+            self.stream.write_all("0\r\n\r\n".as_bytes()).await?;
+            self.stream.flush().await?;
+        } else {
+            self.stream.write_all(&self.response.body_buffer).await?;
+            self.stream.flush().await?;
+        }
         Ok(())
     }
 }
@@ -44,6 +66,11 @@ impl Response {
             header.trim().to_lowercase().parse::<HeaderName>().unwrap(),
             value.parse().unwrap(),
         )
+    }
+
+    pub fn remove_header(&mut self, header: &str) -> Option<HeaderValue> {
+        self.headers
+            .remove(header.trim().to_lowercase().parse::<HeaderName>().unwrap())
     }
 
     pub fn get_header(&mut self, header: &str) -> Option<&HeaderValue> {
@@ -121,6 +148,7 @@ mod tests {
                         "strict-transport-security".parse().unwrap(),
                         "max-age=31536000".parse().unwrap(),
                     ),
+                    ("transfer-encoding".parse().unwrap(), "chunked".parse().unwrap()),
                 ]),
                 200,
                 "HTTP/2".to_string(),
@@ -158,14 +186,25 @@ content-length: 13
 test2 2 2 2 2",
             b"\
 HTTP/1 404
-content-length: 86
 set-cookie: PHPSESSID=bla; path=/; domain=.example.com;HttpOnly;Secure;SameSite=None
+transfer-encoding: chunked
 
-blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+14\r
+blaaaaaaaaaaaaaaaaaa\r
+14\r
+aaaaaaaaaaaaaaaaaaaa\r
+14\r
+aaaaaaaaaaaaaaaaaaaa\r
+14\r
+aaaaaaaaaaaaaaaaaaaa\r
+6\r
+aaaaa
+\r
+0\r\n\r
 ",
         ];
         for (i, mut r) in responses_in.into_iter().enumerate() {
-            r.write_response().await.unwrap();
+            r.write_response(20).await.unwrap();
 
             let mut buf = Vec::new();
 

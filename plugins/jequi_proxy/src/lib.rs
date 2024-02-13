@@ -127,24 +127,8 @@ impl Config {
         let request = request_builder.body(body).unwrap();
         let response = client.request(request).await.unwrap();
         resp.headers = response.headers().clone();
-        let mut resp_body = response.into_body();
-        let is_chunked = matches!(resp.headers.get(header::TRANSFER_ENCODING), Some(encoding) if encoding.to_str().unwrap().trim().eq_ignore_ascii_case("chunked"));
-        while let Some(data) = resp_body.data().await {
-            let mut bytes = data.unwrap();
-            if is_chunked {
-                bytes = [
-                    format!("{:x}\r\n", bytes.len()).as_bytes(),
-                    &bytes,
-                    "\r\n".as_bytes(),
-                ]
-                .concat()
-                .into();
-            }
-            resp.write_body(&bytes).unwrap();
-        }
-        if is_chunked {
-            resp.write_body(format!("0\r\n\r\n").as_bytes()).unwrap();
-        }
+        resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
+            .unwrap();
     }
 }
 

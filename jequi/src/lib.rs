@@ -96,6 +96,7 @@ pub struct Config {
     pub ip: String,
     pub port: u16,
     pub tls_active: bool,
+    pub chunk_size: usize,
 }
 
 pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {
