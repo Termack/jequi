@@ -1,9 +1,10 @@
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use serde_yaml::Value;
 
 use std::{
     any::Any,
+    fmt,
     fs::File,
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
@@ -23,9 +24,62 @@ pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Op
     })
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub enum PathKind {
+    Dir(PathBuf),
+    File(PathBuf),
+}
+
+impl<'de> Deserialize<'de> for PathKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct PathKindVisitor;
+
+        impl<'de> de::Visitor<'de> for PathKindVisitor {
+            type Value = PathKind;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("PathKind")
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&v)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let path = PathBuf::from(v);
+                if !path.exists() {
+                    return Err(E::custom(format!("path doesn't exist: {}", path.display())));
+                }
+
+                match path.is_dir() {
+                    true => Ok(PathKind::Dir(path)),
+                    false => Ok(PathKind::File(path)),
+                }
+            }
+        }
+
+        deserializer.deserialize_string(PathKindVisitor {})
+    }
+}
+
+impl Default for PathKind {
+    fn default() -> Self {
+        Self::Dir(PathBuf::new())
+    }
+}
+
 #[derive(Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct Config {
-    pub static_files_path: Option<String>,
+    pub static_files_path: Option<PathKind>,
     uri: Option<String>,
 }
 
@@ -38,33 +92,33 @@ impl Config {
     }
 
     fn handle_request(&self, req: &mut Request, resp: &mut Response) {
-        let root = Path::new(self.static_files_path.as_ref().unwrap());
+        let final_path = &mut PathBuf::new();
+        match self.static_files_path.as_ref().unwrap() {
+            PathKind::File(file_path) => final_path.push(file_path),
+            PathKind::Dir(path) => {
+                let mut uri = req.uri.as_str();
+                if let Some(uri_config) = self.uri.as_deref() {
+                    uri = uri.strip_prefix(uri_config).unwrap_or(uri);
+                }
+                uri = uri.trim_start_matches('/');
 
-        if !root.exists() {
-            resp.status = 404;
-            return;
-        }
+                let mut file_path = PathBuf::new();
+                for p in Path::new(uri) {
+                    if p == ".." {
+                        file_path.pop();
+                    } else {
+                        file_path.push(p)
+                    }
+                }
 
-        let mut uri = req.uri.as_str();
-        if let Some(uri_config) = self.uri.as_deref() {
-            uri = uri.strip_prefix(uri_config).unwrap_or(uri);
-        }
-        uri = uri.trim_start_matches('/');
+                if file_path == PathBuf::new() {
+                    file_path.push("index.html")
+                }
 
-        let mut final_path = PathBuf::new();
-        for p in Path::new(uri) {
-            if p == ".." {
-                final_path.pop();
-            } else {
-                final_path.push(p)
+                final_path.push(path);
+                final_path.push(file_path);
             }
-        }
-
-        if final_path == PathBuf::new() {
-            final_path.push("index.html")
-        }
-
-        final_path = root.join(final_path);
+        };
 
         match std::fs::read(final_path) {
             Ok(content) => resp.write_body(&content).unwrap(),
@@ -110,13 +164,14 @@ mod tests {
     use std::{
         fs::{self, File},
         io::Cursor,
+        ops::Not,
         os::unix::prelude::PermissionsExt,
         path::Path,
     };
 
     use jequi::{HttpConn, RawStream};
 
-    use crate::Config;
+    use crate::{Config, PathKind};
 
     #[tokio::test]
     async fn handle_static_files_test() {
@@ -126,7 +181,7 @@ mod tests {
         http.request.uri = "/file".to_string();
 
         let mut conf = Config::default();
-        conf.static_files_path = Some(TEST_PATH.to_owned());
+        conf.static_files_path = Some(PathKind::Dir(TEST_PATH.into()));
 
         conf.handle_request(&mut http.request, &mut http.response);
 
@@ -173,6 +228,18 @@ mod tests {
         conf.uri = Some("/uri".to_string());
 
         http.request.uri = "/uri/file".to_string();
+        http.response.body_buffer.truncate(0);
+
+        conf.handle_request(&mut http.request, &mut http.response);
+
+        assert_eq!(http.response.status, 200);
+        assert_eq!(&http.response.body_buffer[..], b"hello");
+
+        // File as path test
+        conf.static_files_path = Some(PathKind::File(format!("{}file", TEST_PATH).into()));
+        conf.uri = None;
+
+        http.request.uri = "/blablabla".to_string();
         http.response.body_buffer.truncate(0);
 
         conf.handle_request(&mut http.request, &mut http.response);

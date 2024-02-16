@@ -39,6 +39,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<T> {
         let mut stream = SslStream::new(ssl, stream).unwrap();
 
         Pin::new(&mut stream).accept().await.unwrap();
+        println!("{:?}", stream.ssl().selected_alpn_protocol());
 
         HttpConn::new(RawStream::Ssl(stream))
     }
