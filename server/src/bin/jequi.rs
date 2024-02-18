@@ -56,9 +56,14 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     let plugin_list = &config_map.config;
     let conf = get_plugin!(plugin_list, jequi);
     if conf.tls_active {
-        http = HttpConn::ssl_new(stream).await;
+        http = HttpConn::ssl_new(stream, conf.http2).await;
     } else {
-        http = HttpConn::new(RawStream::Normal(stream));
+        http = HttpConn::new(RawStream::Normal(stream))
+    }
+
+    if http.version == "h2" {
+        jequi::http2::process_http2(http).await;
+        return;
     }
 
     handle_request(conf, &mut http, config_map.clone()).await;

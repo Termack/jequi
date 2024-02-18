@@ -1,3 +1,4 @@
+use http::version;
 use std::{
     io::{IoSlice, Result},
     pin::Pin,
@@ -66,6 +67,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RawStream<S> {
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+    pub fn with_version(stream: RawStream<T>, version: String) -> HttpConn<T> {
+        HttpConn {
+            version,
+            ..HttpConn::new(stream)
+        }
+    }
+
     pub fn new(stream: RawStream<T>) -> HttpConn<T> {
         HttpConn {
             stream: BufStream::new(stream),

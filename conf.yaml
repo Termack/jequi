@@ -1,4 +1,5 @@
 tls_active: true
+http2: true
 proxy_address: "www.google.com"
 host:
   jequi.com:

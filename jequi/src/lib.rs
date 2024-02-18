@@ -3,6 +3,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(byte_slice_trim_ascii)]
 pub mod config;
+pub mod http2;
 pub mod request;
 pub mod response;
 pub mod ssl;
@@ -96,6 +97,7 @@ pub struct Config {
     pub ip: String,
     pub port: u16,
     pub tls_active: bool,
+    pub http2: bool,
     pub chunk_size: usize,
 }
 

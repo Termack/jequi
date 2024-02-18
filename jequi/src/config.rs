@@ -11,6 +11,7 @@ impl Default for Config {
             ip: String::from("127.0.0.1"),
             port: 7878,
             tls_active: false,
+            http2: false,
             chunk_size: 1024 * 64,
         }
     }

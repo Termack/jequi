@@ -4,8 +4,8 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite};
 
 use crate::{HttpConn, Request};
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
-    async fn read_until_handle_eof(&mut self, byte: u8, buf: &'a mut Vec<u8>) -> Result<()> {
+impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+    async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
         let n = self.stream.read_until(byte, buf).await?;
         if n == 0 {
             return Err(Error::new(ErrorKind::UnexpectedEof, "unexpected eof"));
