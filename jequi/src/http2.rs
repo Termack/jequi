@@ -1,9 +1,11 @@
-use std::io::Cursor;
+use hpack_patched::{Decoder, Encoder};
+use http::{HeaderName, HeaderValue};
+use std::{collections::HashMap, io::Cursor, sync::Arc};
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufStream};
 
-use crate::HttpConn;
+use crate::{ConfigMap, HttpConn, RawStream, Request, Response};
 
 #[derive(Debug)]
 struct Http2Frame {
@@ -15,6 +17,11 @@ struct Http2Frame {
 }
 
 const PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
+const END_STREAM_FLAG: u8 = 0b00000001;
+const END_HEADERS_FLAG: u8 = 0b00000100;
+const PADDED_FLAG: u8 = 0b00001000;
+const PRIORITY_FLAG: u8 = 0b00100000;
 
 impl Http2Frame {
     async fn read_frame<T: AsyncReadExt + Unpin>(stream: &mut T) -> Self {
@@ -54,40 +61,113 @@ impl Http2Frame {
     }
 }
 
-pub async fn process_http2<T: AsyncRead + AsyncWrite + Unpin>(mut http: HttpConn<T>) {
-    let mut buf = vec![0; 24];
-    http.stream.read_exact(&mut buf).await.unwrap();
-    if buf != PREFACE {
-        panic!("PREFACE WRONG");
-    }
-    http.stream.flush().await.unwrap();
+struct Stream {
+    id: u32,
+    request: Request,
+    response: Response,
+}
 
-    println!("recv: {:?}", Http2Frame::read_frame(&mut http.stream).await);
-    let settings: &mut [u8] = &mut Http2Frame {
-        length: 0,
-        typ: 4,
-        flags: 0,
-        stream_id: 0,
-        payload: Vec::new(),
-    }
-    .encode();
-    http.stream.write_all(settings).await.unwrap();
-    let ack: &mut [u8] = &mut Http2Frame {
-        length: 0,
-        typ: 4,
-        flags: 1,
-        stream_id: 0,
-        payload: Vec::new(),
-    }
-    .encode();
-    http.stream.write_all(ack).await.unwrap();
-    http.stream.flush().await.unwrap();
-    println!(
-        "sent: {:?}",
-        Http2Frame::read_frame(&mut Cursor::new(ack)).await
-    );
+pub struct Http2Conn<T: AsyncRead + AsyncWrite + Unpin> {
+    pub conn: BufStream<RawStream<T>>,
+    streams: HashMap<u32, Stream>,
+}
 
-    loop {
-        println!("recv: {:?}", Http2Frame::read_frame(&mut http.stream).await)
+impl<T: AsyncRead + AsyncWrite + Unpin> From<HttpConn<T>> for Http2Conn<T> {
+    fn from(http: HttpConn<T>) -> Self {
+        Self {
+            conn: http.conn,
+            streams: HashMap::new(),
+        }
+    }
+}
+
+impl<T: AsyncRead + AsyncWrite + Unpin> Http2Conn<T> {
+    pub async fn process_http2(&mut self, config_map: Arc<ConfigMap>) -> ! {
+        let mut buf = vec![0; 24];
+        self.conn.read_exact(&mut buf).await.unwrap();
+        if buf != PREFACE {
+            panic!("PREFACE WRONG");
+        }
+        self.conn.flush().await.unwrap();
+
+        println!("recv: {:?}", Http2Frame::read_frame(&mut self.conn).await);
+        let settings: &mut [u8] = &mut Http2Frame {
+            length: 0,
+            typ: 4,
+            flags: 0,
+            stream_id: 0,
+            payload: Vec::new(),
+        }
+        .encode();
+        self.conn.write_all(settings).await.unwrap();
+        let ack: &mut [u8] = &mut Http2Frame {
+            length: 0,
+            typ: 4,
+            flags: 1,
+            stream_id: 0,
+            payload: Vec::new(),
+        }
+        .encode();
+        self.conn.write_all(ack).await.unwrap();
+        self.conn.flush().await.unwrap();
+        println!(
+            "sent: {:?}",
+            Http2Frame::read_frame(&mut Cursor::new(ack)).await
+        );
+
+        let mut decoder = Decoder::new();
+        let mut encoder = Encoder::new();
+
+        loop {
+            let frame = Http2Frame::read_frame(&mut self.conn).await;
+            if frame.typ == 1 {
+                let flags = frame.flags;
+                let mut payload: &[u8] = &frame.payload;
+                if flags & PADDED_FLAG != 0 {
+                    let _padding_length = payload.read_u8().await.unwrap();
+                }
+                if flags & PRIORITY_FLAG != 0 {
+                    payload.read_exact(&mut [0; 5]).await.unwrap();
+                }
+
+                let mut request = Request::new();
+
+                decoder
+                    .decode_with_cb(payload, |h, v| {
+                        if h[0] == b':' {
+                            match h.as_ref() {
+                                b":method" => {
+                                    request.method = String::from_utf8_lossy(v.as_ref()).to_string()
+                                }
+                                b":path" => {
+                                    request.uri = String::from_utf8_lossy(v.as_ref()).to_string()
+                                }
+                                b":authority" => {
+                                    request.host =
+                                        Some(String::from_utf8_lossy(v.as_ref()).to_string())
+                                }
+                                _ => (),
+                            }
+                            return;
+                        }
+                        request.headers.append(
+                            HeaderName::from_bytes(h.as_ref()).unwrap(),
+                            HeaderValue::from_bytes(v.as_ref()).unwrap(),
+                        );
+                    })
+                    .unwrap();
+                let mut stream = Stream {
+                    id: frame.stream_id,
+                    request,
+                    response: Response::new(),
+                };
+                stream
+                    .request
+                    .handle_request(&mut stream.response, config_map.clone())
+                    .await;
+                self.streams.insert(stream.id, stream);
+            }
+            println!("recv: {:?}", frame)
+        }
     }
 }

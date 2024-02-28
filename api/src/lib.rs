@@ -1,3 +1,4 @@
+use futures::executor::block_on;
 use jequi::{Request, Response};
 use jequi_proxy::*; // TODO: proc macro to use all plugins to load custom apis
 use std::ffi::{c_int, CStr, CString};
@@ -50,7 +51,8 @@ pub unsafe extern "C" fn get_request_header(
 #[no_mangle]
 pub unsafe extern "C" fn get_request_body(req: *mut Request) -> *const c_char {
     let req = unsafe { get_object_from_pointer(req) };
-    CString::new(req.get_body().unwrap_or(&[]))
+    let body = block_on(req.get_body());
+    CString::new(body.as_deref().unwrap_or(&[]))
         .unwrap()
         .into_raw()
 }

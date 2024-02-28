@@ -1,5 +1,5 @@
 #![feature(let_chains)]
-use chrono::Utc;
+use jequi::http2::Http2Conn;
 use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
 use plugins::{get_plugin, load_plugins};
 use std::process;
@@ -14,7 +14,7 @@ use tokio::{
 
 load_plugins!();
 
-async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
+async fn handle_request<T: AsyncRead + AsyncWrite + Unpin + Send>(
     conf: &Config,
     http: &mut HttpConn<T>,
     config_map: Arc<ConfigMap>,
@@ -24,29 +24,23 @@ async fn handle_request<T: AsyncRead + AsyncWrite + Unpin>(
     http.parse_headers().await.unwrap();
 
     // TODO: Read the body only if needed (remember to consume stream if body not read)
-    match http.read_body().await {
-        Ok(_) => (),
-        Err(ref e) if e.kind() == ErrorKind::NotFound => (),
-        Err(e) => panic!("Error reading request body: {}", e),
-    };
+    let read_body = HttpConn::read_body(&mut http.conn, &http.request);
 
-    http.response.set_header("server", "jequi");
-    http.response.set_header(
-        "date",
-        &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
-    );
+    let request = &mut http.request;
+    tokio_scoped::scope(|scope| {
+        scope.spawn(async move {
+            match read_body.await {
+                Ok(_) => (),
+                Err(ref e) if e.kind() == ErrorKind::NotFound => (),
+                Err(e) => panic!("Error reading request body: {}", e),
+            };
+            println!("body was read :)");
+        });
 
-    let config = config_map.get_config_for_request(http.request.host.as_deref(), &http.request.uri);
-
-    for handle_request in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
-        if let Some(fut) = handle_request(&mut http.request, &mut http.response) {
-            fut.await
-        }
-    }
-
-    if http.response.status == 0 {
-        http.response.status = 200;
-    }
+        scope.spawn(async {
+            request.handle_request(&mut http.response, config_map).await;
+        });
+    });
 
     http.write_response(conf.chunk_size).await.unwrap();
 }
@@ -62,7 +56,8 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     }
 
     if http.version == "h2" {
-        jequi::http2::process_http2(http).await;
+        let mut http = Http2Conn::from(http);
+        http.process_http2(config_map).await;
         return;
     }
 

@@ -1,3 +1,4 @@
+Change read body async logic
 HTTP2 and some other things in http1 (like keepalive, chunked, gzip)
 Reload isn't working correctly when remove or add a new plugin (example: comment static_files_path and uncomment proxy_address)
 Add proxy and jequi_go proxy tests

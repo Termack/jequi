@@ -212,12 +212,12 @@ r
 
         req.parse_headers().await.unwrap();
 
-        let result = req.read_body().await;
+        let result = HttpConn::read_body(&mut req.conn, &req.request).await;
 
         match &expected_results[i] {
             Ok(expected_success) => assert_eq!(
                 expected_success,
-                &req.request.body.unwrap(),
+                &req.request.body.lock().await.get_body().await.unwrap(),
                 "Testing read body for request: {}",
                 String::from_utf8_lossy(r)
             ),

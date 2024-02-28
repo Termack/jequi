@@ -90,7 +90,7 @@ mod tests {
 
             let req = HttpConn::ssl_new(stream, false).await;
 
-            if let RawStream::Ssl(mut stream) = req.stream.into_inner() {
+            if let RawStream::Ssl(mut stream) = req.conn.into_inner() {
                 stream.write_all(b"hello").await.unwrap()
             } else {
                 panic!("Stream is not ssl")

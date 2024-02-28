@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 #![feature(closure_lifetime_binder)]
+use futures::executor::block_on;
 use futures::future::{BoxFuture, FutureExt};
 use http::header;
 use hyper::body::{self, HttpBody};
@@ -11,7 +12,7 @@ use serde_yaml::Value;
 use std::any::Any;
 use std::ffi::CStr;
 use std::fmt;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::os::raw::c_char;
 use std::sync::Arc;
 use trait_set::trait_set;
@@ -118,8 +119,8 @@ impl Config {
             proxy_address.as_ref().unwrap().deref().parse().unwrap(),
         );
         *request_builder.headers_mut().unwrap() = req.headers.clone();
-        let body = match req.body.as_ref() {
-            Some(body) => Body::from(body.clone()),
+        let body = match req.get_body().await {
+            Some(body) => Body::from(body.to_owned()),
             None => Body::empty(),
         };
         let https = HttpsConnector::new();

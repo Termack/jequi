@@ -1,7 +1,7 @@
 package handle
 
 import (
-	// "fmt"
+	"fmt"
 	"strings"
 
 	"github.com/jequi_go"
@@ -9,13 +9,13 @@ import (
 
 func HandleRequest(req jequi_go.Request, resp jequi_go.Response) {
 	resp.SetHeader("hello", "world")
-	// resp.WriteBody("Hello World!\n")
+	resp.WriteBody("Hello World!\n")
 	resp.SetStatus(404)
-	// fmt.Printf("Method: %q, Uri: %q, User-Agent: %q, Body: %q\n",
-	// 	req.GetMethod(),
-	// 	req.GetUri(),
-	// 	req.GetHeader("User-Agent"),
-	// 	req.GetBody())
+	fmt.Printf("Method: %q, Uri: %q, User-Agent: %q, Body: %q\n",
+		req.GetMethod(),
+		req.GetUri(),
+		req.GetHeader("User-Agent"),
+		req.GetBody())
 }
 
 func HandleProxyRequest(req jequi_go.Request, resp jequi_go.Response) *string {

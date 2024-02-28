@@ -76,7 +76,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
 
     pub fn new(stream: RawStream<T>) -> HttpConn<T> {
         HttpConn {
-            stream: BufStream::new(stream),
+            conn: BufStream::new(stream),
             version: String::new(),
             request: Request::new(),
             response: Response::new(),

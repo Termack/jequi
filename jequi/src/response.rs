@@ -30,7 +30,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
             headers += &header;
         }
         headers += "\n";
-        self.stream.write_all(headers.as_bytes()).await?;
+        self.conn.write_all(headers.as_bytes()).await?;
         if chunked {
             for chunk in self.response.body_buffer.chunks(chunk_size) {
                 let chunk = [
@@ -39,14 +39,14 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
                     "\r\n".as_bytes(),
                 ]
                 .concat();
-                self.stream.write_all(&chunk).await?;
-                self.stream.flush().await?;
+                self.conn.write_all(&chunk).await?;
+                self.conn.flush().await?;
             }
-            self.stream.write_all("0\r\n\r\n".as_bytes()).await?;
-            self.stream.flush().await?;
+            self.conn.write_all("0\r\n\r\n".as_bytes()).await?;
+            self.conn.flush().await?;
         } else {
-            self.stream.write_all(&self.response.body_buffer).await?;
-            self.stream.flush().await?;
+            self.conn.write_all(&self.response.body_buffer).await?;
+            self.conn.flush().await?;
         }
         Ok(())
     }
@@ -91,12 +91,18 @@ impl Default for Response {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{
+        io::Cursor,
+        sync::{Arc, RwLock},
+    };
 
     use http::HeaderMap;
-    use tokio::io::{AsyncReadExt, BufStream};
+    use tokio::{
+        io::{AsyncReadExt, BufStream},
+        sync::Mutex,
+    };
 
-    use crate::{HttpConn, RawStream, Request, Response};
+    use crate::{HttpConn, RawStream, Request, RequestBody, Response};
 
     fn new_response(
         headers: HeaderMap,
@@ -106,14 +112,14 @@ mod tests {
     ) -> HttpConn<Cursor<Vec<u8>>> {
         let stream: Vec<u8> = Vec::new();
         HttpConn {
-            stream: BufStream::new(RawStream::Normal(Cursor::new(stream))),
+            conn: BufStream::new(RawStream::Normal(Cursor::new(stream))),
             version,
             request: Request {
                 method: String::new(),
                 uri: String::new(),
                 headers: HeaderMap::new(),
                 host: None,
-                body: None,
+                body: Arc::new(Mutex::new(RequestBody::default())),
             },
             response: Response {
                 status,
@@ -208,11 +214,11 @@ aaaaa
 
             let mut buf = Vec::new();
 
-            if let RawStream::Normal(stream) = r.stream.get_mut() {
+            if let RawStream::Normal(stream) = r.conn.get_mut() {
                 stream.set_position(0)
             }
 
-            let n = r.stream.read_to_end(&mut buf).await.unwrap();
+            let n = r.conn.read_to_end(&mut buf).await.unwrap();
 
             assert_eq!(
                 String::from_utf8_lossy(&buf[..n]),

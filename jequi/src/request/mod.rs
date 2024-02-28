@@ -1,12 +1,24 @@
+use chrono::Utc;
+use futures::{executor::block_on, Future, FutureExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
-use std::io::{Error, ErrorKind, Result};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite};
+use std::{
+    io::{Error, ErrorKind, Result},
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{ready, Context, Poll},
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufStream},
+    pin,
+    sync::Mutex,
+    time::{sleep, Duration},
+};
 
-use crate::{HttpConn, Request};
+use crate::{ConfigMap, HttpConn, RawStream, Request, RequestBody, Response};
 
-impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
     async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
-        let n = self.stream.read_until(byte, buf).await?;
+        let n = self.conn.read_until(byte, buf).await?;
         if n == 0 {
             return Err(Error::new(ErrorKind::UnexpectedEof, "unexpected eof"));
         }
@@ -31,11 +43,11 @@ impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
 
     pub async fn parse_headers(&mut self) -> Result<()> {
         loop {
-            let next = self.stream.read_u8().await?;
+            let next = self.conn.read_u8().await?;
             match next {
                 b'\n' => return Ok(()),
                 b'\r' => {
-                    return (self.stream.read_u8().await? == b'\n')
+                    return (self.conn.read_u8().await? == b'\n')
                         .then_some(())
                         .ok_or(Error::new(
                             ErrorKind::InvalidData,
@@ -52,6 +64,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
             let header = String::from_utf8_lossy(header[..header.len() - 1].trim_ascii_start())
                 .to_lowercase();
             let value = String::from_utf8_lossy(value[..value.len() - 1].trim_ascii()).to_string();
+
             if header == "host" {
                 self.request.host = Some(value.clone());
             }
@@ -62,10 +75,77 @@ impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
         }
     }
 
-    pub async fn read_body(&mut self) -> Result<()> {
-        let content_length: usize = self
-            .request
-            .get_header("Content-Length")
+    pub fn read_body<'b>(
+        conn: &'b mut BufStream<RawStream<T>>,
+        request: &Request,
+    ) -> ReadBody<'b, T> {
+        // ReadBody {
+        //     content_length: self.request.get_content_length(),
+        //     conn: &mut self.conn,
+        //     body: &mut self.request.body,
+        // }
+        ReadBody {
+            content_length: request.get_content_length(),
+            conn,
+            body: request.body.clone(),
+        }
+    }
+}
+
+pub struct ReadBody<'a, T: AsyncRead + AsyncWrite + Unpin> {
+    content_length: Result<usize>,
+    conn: &'a mut BufStream<RawStream<T>>,
+    body: Arc<Mutex<RequestBody>>,
+}
+
+impl<'a, T: AsyncRead + AsyncWrite + Unpin> Future for ReadBody<'a, T> {
+    type Output = Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let content_length: usize = match &self.content_length {
+            Ok(content_length) => *content_length,
+            Err(err) => {
+                let self_pin = Pin::new(&self);
+                println!("deadlock?");
+                let lock = self_pin.body.lock();
+                pin!(lock);
+                let mut body = ready!(lock.poll(cx));
+                println!("no");
+                body.write_body(None);
+                return Poll::Ready(Err(Error::new(err.kind(), err.to_string())));
+            }
+        };
+
+        let mut bytes: Vec<u8> = vec![0; content_length];
+        let mut self_pin = Pin::new(&mut self);
+        let read_exact = self_pin.conn.read_exact(&mut bytes);
+        pin!(read_exact);
+        ready!(read_exact.poll(cx))?;
+
+        let self_pin = Pin::new(&self);
+        println!("deadlock?");
+        let lock = self_pin.body.lock();
+        pin!(lock);
+        let mut body = ready!(lock.poll(cx));
+        println!("no");
+        body.write_body(Some(bytes));
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl Request {
+    pub fn new() -> Request {
+        Request {
+            method: String::new(),
+            uri: String::new(),
+            headers: HeaderMap::new(),
+            host: None,
+            body: Arc::new(Mutex::new(RequestBody::default())),
+        }
+    }
+
+    fn get_content_length(&self) -> Result<usize> {
+        self.get_header("Content-Length")
             .ok_or(Error::new(ErrorKind::NotFound, "No content length"))?
             .to_str()
             .map_err(|err| {
@@ -80,22 +160,26 @@ impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
                     ErrorKind::InvalidData,
                     format!("Cant convert content length to int: {}", err),
                 )
-            })?;
-        let mut body: Vec<u8> = vec![0; content_length];
-        self.stream.read_exact(&mut body).await?;
-        self.request.body = Some(body);
-        Ok(())
+            })
     }
-}
 
-impl Request {
-    pub fn new() -> Request {
-        Request {
-            method: String::new(),
-            uri: String::new(),
-            headers: HeaderMap::new(),
-            host: None,
-            body: None,
+    pub async fn handle_request(&mut self, response: &mut Response, config_map: Arc<ConfigMap>) {
+        response.set_header("server", "jequi");
+        response.set_header(
+            "date",
+            &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
+        );
+
+        let config = config_map.get_config_for_request(self.host.as_deref(), &self.uri);
+
+        for handle_plugin in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
+            if let Some(fut) = handle_plugin(self, response) {
+                fut.await
+            }
+        }
+
+        if response.status == 0 {
+            response.status = 200;
         }
     }
 
@@ -103,8 +187,10 @@ impl Request {
         self.headers.get(header.to_lowercase().trim())
     }
 
-    pub fn get_body(&self) -> Option<&[u8]> {
-        self.body.as_deref()
+    pub async fn get_body(&self) -> Option<Vec<u8>> {
+        let body = self.body.lock().await.get_body().await;
+        println!("body was used :O");
+        body
     }
 }
 
