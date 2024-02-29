@@ -92,6 +92,7 @@ impl Default for Response {
 #[cfg(test)]
 mod tests {
     use std::{
+        cell::{Cell, UnsafeCell},
         io::Cursor,
         sync::{Arc, RwLock},
     };
@@ -102,7 +103,7 @@ mod tests {
         sync::Mutex,
     };
 
-    use crate::{HttpConn, RawStream, Request, RequestBody, Response};
+    use crate::{body, HttpConn, RawStream, Request, Response};
 
     fn new_response(
         headers: HeaderMap,
@@ -119,7 +120,7 @@ mod tests {
                 uri: String::new(),
                 headers: HeaderMap::new(),
                 host: None,
-                body: Arc::new(Mutex::new(RequestBody::default())),
+                body: UnsafeCell::new(body::RequestBody::default()),
             },
             response: Response {
                 status,

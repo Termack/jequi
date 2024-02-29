@@ -2,6 +2,7 @@ use chrono::Utc;
 use futures::{executor::block_on, Future, FutureExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use std::{
+    cell::UnsafeCell,
     io::{Error, ErrorKind, Result},
     pin::Pin,
     sync::{Arc, RwLock},
@@ -14,7 +15,7 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-use crate::{ConfigMap, HttpConn, RawStream, Request, RequestBody, Response};
+use crate::{body::RequestBody, ConfigMap, HttpConn, RawStream, Request, Response};
 
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
     async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
@@ -87,47 +88,41 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
         ReadBody {
             content_length: request.get_content_length(),
             conn,
-            body: request.body.clone(),
+            body: request.body.get(),
         }
     }
 }
 
-pub struct ReadBody<'a, T: AsyncRead + AsyncWrite + Unpin> {
+pub struct ReadBody<'a, T: AsyncRead + AsyncWrite + Unpin + Send> {
     content_length: Result<usize>,
     conn: &'a mut BufStream<RawStream<T>>,
-    body: Arc<Mutex<RequestBody>>,
+    body: *mut RequestBody,
 }
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> Future for ReadBody<'a, T> {
+unsafe impl<T: AsyncRead + AsyncWrite + Unpin + Send> Send for ReadBody<'_, T> {}
+
+impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
     type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        println!("sleeping");
+        block_on(sleep(Duration::from_secs(3)));
+        println!("slept");
+        let body = unsafe { &mut *self.body };
+
         let content_length: usize = match &self.content_length {
             Ok(content_length) => *content_length,
             Err(err) => {
-                let self_pin = Pin::new(&self);
-                println!("deadlock?");
-                let lock = self_pin.body.lock();
-                pin!(lock);
-                let mut body = ready!(lock.poll(cx));
-                println!("no");
                 body.write_body(None);
                 return Poll::Ready(Err(Error::new(err.kind(), err.to_string())));
             }
         };
 
         let mut bytes: Vec<u8> = vec![0; content_length];
-        let mut self_pin = Pin::new(&mut self);
-        let read_exact = self_pin.conn.read_exact(&mut bytes);
+        let read_exact = self.conn.read_exact(&mut bytes);
         pin!(read_exact);
         ready!(read_exact.poll(cx))?;
 
-        let self_pin = Pin::new(&self);
-        println!("deadlock?");
-        let lock = self_pin.body.lock();
-        pin!(lock);
-        let mut body = ready!(lock.poll(cx));
-        println!("no");
         body.write_body(Some(bytes));
         Poll::Ready(Ok(()))
     }
@@ -140,7 +135,7 @@ impl Request {
             uri: String::new(),
             headers: HeaderMap::new(),
             host: None,
-            body: Arc::new(Mutex::new(RequestBody::default())),
+            body: UnsafeCell::new(RequestBody::default()),
         }
     }
 
@@ -187,10 +182,8 @@ impl Request {
         self.headers.get(header.to_lowercase().trim())
     }
 
-    pub async fn get_body(&self) -> Option<Vec<u8>> {
-        let body = self.body.lock().await.get_body().await;
-        println!("body was used :O");
-        body
+    pub fn get_body<'a>(&'_ self, buf: &'a mut Vec<u8>) -> crate::body::GetBody<'a> {
+        RequestBody::get_body(self.body.get(), buf)
     }
 }
 

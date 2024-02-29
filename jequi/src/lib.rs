@@ -12,6 +12,7 @@ pub mod tcp_stream;
 
 use std::{
     any::Any,
+    cell::{Cell, UnsafeCell},
     collections::HashMap,
     fmt::{self, Debug},
     sync::{Arc, RwLock},
@@ -110,18 +111,12 @@ pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {
     Normal(T),
 }
 
-#[derive(Default, Debug)]
-pub struct RequestBody {
-    bytes: Option<Vec<u8>>,
-    is_written: Box<bool>,
-}
-
 pub struct Request {
     pub method: String,
     pub uri: String,
     pub headers: HeaderMap,
     pub host: Option<String>,
-    pub body: Arc<Mutex<RequestBody>>,
+    pub body: UnsafeCell<body::RequestBody>,
 }
 
 #[repr(C)]
