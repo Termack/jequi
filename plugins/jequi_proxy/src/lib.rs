@@ -119,12 +119,10 @@ impl Config {
             proxy_address.as_ref().unwrap().deref().parse().unwrap(),
         );
         *request_builder.headers_mut().unwrap() = req.headers.clone();
-        let mut buf = Vec::new();
-        let get_body = req.get_body(&mut buf);
-        get_body.await.unwrap();
-        let body = match buf.len() {
-            0 => Body::empty(),
-            _ => Body::from(buf),
+        let bodyy = req.get_body().await.clone();
+        let body = match bodyy.as_deref() {
+            None => Body::empty(),
+            Some(buf) => Body::from(buf.to_owned()),
         };
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);

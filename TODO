@@ -1,3 +1,4 @@
+IMPORTANT: Make a better implementation for reading body and http2 and implement tests for both
 HTTP2 and some other things in http1 (like keepalive, chunked, gzip)
 More tests (read body async, http2, some other things)
 Reload isn't working correctly when remove or add a new plugin (example: comment static_files_path and uncomment proxy_address)
@@ -6,7 +7,6 @@ Add Websocket
 Add plugin to generate certificate
 Add logging
 Add metrics
-Check better ways to read body async
 Add variables that can be changed in the request (and then change proxy plugin to call a function set_peer instead of returning an address)
 Proc macro to create a struct for configuration from plugin configs
 Improve plugin loading (improve the sintax, change requirement logic, think of a better way to define handler execution order)

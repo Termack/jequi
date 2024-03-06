@@ -3,11 +3,11 @@ use std::{
     io::{Error, ErrorKind, Result},
 };
 
-use crate::{HttpConn, Response};
+use crate::{body::RequestBody, HttpConn, Response};
 use http::{header, HeaderMap, HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
     pub async fn write_response(&mut self, chunk_size: usize) -> Result<()> {
         let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);
@@ -103,7 +103,10 @@ mod tests {
         sync::Mutex,
     };
 
-    use crate::{body, HttpConn, RawStream, Request, Response};
+    use crate::{
+        body::{self, RequestBody},
+        HttpConn, RawStream, Request, Response,
+    };
 
     fn new_response(
         headers: HeaderMap,
@@ -120,7 +123,7 @@ mod tests {
                 uri: String::new(),
                 headers: HeaderMap::new(),
                 host: None,
-                body: UnsafeCell::new(body::RequestBody::default()),
+                body: Arc::new(RequestBody::default()),
             },
             response: Response {
                 status,

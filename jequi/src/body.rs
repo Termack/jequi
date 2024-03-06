@@ -1,4 +1,7 @@
 use std::io::Result;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Arc;
 use std::task::Waker;
 use std::{
     pin::Pin,
@@ -9,63 +12,46 @@ use futures::Future;
 
 #[derive(Default, Debug)]
 pub struct RequestBody {
-    bytes: Option<Vec<u8>>,
-    is_written: bool,
+    bytes: Arc<Option<Vec<u8>>>,
+    is_written: AtomicBool,
     waker: Option<Waker>,
 }
 
-unsafe impl Send for RequestBody {}
-
-pub struct GetBody<'a> {
-    body: *mut RequestBody,
-    buf: &'a mut Vec<u8>,
+pub struct GetBody {
+    body: Arc<RequestBody>,
 }
 
-unsafe impl Send for GetBody<'_> {}
-unsafe impl Sync for GetBody<'_> {}
+unsafe impl Send for GetBody {}
+unsafe impl Sync for GetBody {}
 
-impl<'a> Future for GetBody<'a> {
-    type Output = Result<()>;
+impl Future for GetBody {
+    type Output = Arc<Option<Vec<u8>>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         println!("is it written?");
-        if !unsafe { &*self.body }.is_written {
-            unsafe { &mut *self.body }.waker = Some(cx.waker().clone());
+        if !&self.body.is_written.load(Relaxed) {
+            self.body.get_mut().waker = Some(cx.waker().clone());
             return Poll::Pending;
         }
-        let bytes = &unsafe { &*self.body }.bytes;
 
-        if let Some(bytes) = bytes.as_deref() {
-            self.buf.extend_from_slice(bytes);
-        }
-        Poll::Ready(Ok(()))
+        println!("yees");
+        Poll::Ready(self.body.clone().bytes.clone())
     }
 }
 
-pub struct WriteBody<'a> {
-    body: &'a mut RequestBody,
-}
-
-impl<'a> Future for WriteBody<'a> {
-    type Output = Option<Vec<u8>>;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.body.is_written {
-            return Poll::Pending;
-        }
-        Poll::Ready(self.body.bytes.clone())
+impl<'a> RequestBody {
+    pub fn get_body(self: Arc<Self>) -> GetBody {
+        GetBody { body: self }
     }
-}
 
-impl RequestBody {
-    pub fn get_body(body: *mut RequestBody, buf: &mut Vec<u8>) -> GetBody {
-        GetBody { body, buf }
+    pub fn get_mut(self: &'a mut Arc<Self>) -> &'a mut Self {
+        unsafe { Arc::get_mut_unchecked(self) }
     }
 
     pub fn write_body(&mut self, bytes: Option<Vec<u8>>) {
-        self.bytes = bytes;
-        self.is_written = true;
-        if let Some(waker) = &self.waker {
+        self.bytes = Arc::new(bytes);
+        self.is_written.store(true, Relaxed);
+        for waker in &self.waker {
             waker.wake_by_ref();
         }
     }

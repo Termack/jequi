@@ -17,7 +17,7 @@ static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
 static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
-impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin> HttpConn<T> {
+impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin + Send> HttpConn<T> {
     pub async fn ssl_new(stream: T, http2: bool) -> HttpConn<T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         acceptor.set_servername_callback(

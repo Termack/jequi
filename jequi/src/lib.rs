@@ -2,6 +2,7 @@
 #![feature(io_error_more)]
 #![feature(option_get_or_insert_default)]
 #![feature(byte_slice_trim_ascii)]
+#![feature(get_mut_unchecked)]
 pub mod body;
 pub mod config;
 pub mod http2;
@@ -18,6 +19,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use body::RequestBody;
 use futures::future::BoxFuture;
 use http::HeaderMap;
 use serde::Deserialize;
@@ -106,7 +108,7 @@ pub struct Config {
     pub chunk_size: usize,
 }
 
-pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin> {
+pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin + Send> {
     Ssl(SslStream<T>),
     Normal(T),
 }
@@ -116,7 +118,7 @@ pub struct Request {
     pub uri: String,
     pub headers: HeaderMap,
     pub host: Option<String>,
-    pub body: UnsafeCell<body::RequestBody>,
+    pub body: Arc<RequestBody>,
 }
 
 #[repr(C)]
@@ -126,7 +128,7 @@ pub struct Response {
     pub body_buffer: Vec<u8>,
 }
 
-pub struct HttpConn<T: AsyncRead + AsyncWrite + Unpin> {
+pub struct HttpConn<T: AsyncRead + AsyncWrite + Unpin + Send> {
     pub conn: BufStream<RawStream<T>>,
     pub version: String,
     pub request: Request,

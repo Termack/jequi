@@ -15,7 +15,10 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-use crate::{body::RequestBody, ConfigMap, HttpConn, RawStream, Request, Response};
+use crate::{
+    body::{GetBody, RequestBody},
+    ConfigMap, HttpConn, RawStream, Request, Response,
+};
 
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
     async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
@@ -80,15 +83,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
         conn: &'b mut BufStream<RawStream<T>>,
         request: &Request,
     ) -> ReadBody<'b, T> {
-        // ReadBody {
-        //     content_length: self.request.get_content_length(),
-        //     conn: &mut self.conn,
-        //     body: &mut self.request.body,
-        // }
         ReadBody {
             content_length: request.get_content_length(),
             conn,
-            body: request.body.get(),
+            body: request.body.clone(),
         }
     }
 }
@@ -96,7 +94,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
 pub struct ReadBody<'a, T: AsyncRead + AsyncWrite + Unpin + Send> {
     content_length: Result<usize>,
     conn: &'a mut BufStream<RawStream<T>>,
-    body: *mut RequestBody,
+    body: Arc<RequestBody>,
 }
 
 unsafe impl<T: AsyncRead + AsyncWrite + Unpin + Send> Send for ReadBody<'_, T> {}
@@ -108,12 +106,11 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
         println!("sleeping");
         block_on(sleep(Duration::from_secs(3)));
         println!("slept");
-        let body = unsafe { &mut *self.body };
 
         let content_length: usize = match &self.content_length {
             Ok(content_length) => *content_length,
             Err(err) => {
-                body.write_body(None);
+                self.body.clone().get_mut().write_body(None);
                 return Poll::Ready(Err(Error::new(err.kind(), err.to_string())));
             }
         };
@@ -123,7 +120,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
         pin!(read_exact);
         ready!(read_exact.poll(cx))?;
 
-        body.write_body(Some(bytes));
+        self.body.clone().get_mut().write_body(Some(bytes));
         Poll::Ready(Ok(()))
     }
 }
@@ -135,7 +132,7 @@ impl Request {
             uri: String::new(),
             headers: HeaderMap::new(),
             host: None,
-            body: UnsafeCell::new(RequestBody::default()),
+            body: Arc::new(RequestBody::default()),
         }
     }
 
@@ -182,8 +179,8 @@ impl Request {
         self.headers.get(header.to_lowercase().trim())
     }
 
-    pub fn get_body<'a>(&'_ self, buf: &'a mut Vec<u8>) -> crate::body::GetBody<'a> {
-        RequestBody::get_body(self.body.get(), buf)
+    pub fn get_body(&self) -> GetBody {
+        RequestBody::get_body(self.body.clone())
     }
 }
 

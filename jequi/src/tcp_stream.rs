@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadBuf};
 
 use crate::{HttpConn, RawStream, Request, Response};
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for RawStream<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for RawStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -21,7 +21,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for RawStream<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RawStream<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for RawStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -66,7 +66,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RawStream<S> {
     }
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin> HttpConn<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
     pub fn with_version(stream: RawStream<T>, version: String) -> HttpConn<T> {
         HttpConn {
             version,
