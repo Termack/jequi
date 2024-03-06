@@ -49,8 +49,9 @@ async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
     let mut http: HttpConn<TcpStream>;
     let plugin_list = &config_map.config;
     let conf = get_plugin!(plugin_list, jequi);
+
     if conf.tls_active {
-        http = HttpConn::ssl_new(stream, conf.http2).await;
+        http = HttpConn::ssl_new(stream, config_map.clone()).await;
     } else {
         http = HttpConn::new(RawStream::Normal(stream))
     }

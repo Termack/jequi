@@ -1,7 +1,8 @@
 use futures::{pin_mut, select, FutureExt};
 use hpack_patched::{Decoder, Encoder};
-use http::{request, HeaderMap, HeaderName, HeaderValue};
-use std::{collections::HashMap, io::Cursor, sync::Arc};
+use http::{header, request, HeaderMap, HeaderName, HeaderValue};
+use plugins::get_plugin;
+use std::{cmp::min, collections::HashMap, io::Cursor, sync::Arc};
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use tokio::{
@@ -14,13 +15,18 @@ use tokio::{
 
 use crate::{ConfigMap, HttpConn, RawStream, Request, Response};
 
+use crate as jequi;
+
 #[derive(Debug)]
-struct Http2Frame {
+struct Http2Frame<P>
+where
+    P: AsRef<[u8]>,
+{
     length: u32,
     typ: u8,
     flags: u8,
     stream_id: u32,
-    payload: Vec<u8>,
+    payload: P,
 }
 
 const PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
@@ -41,10 +47,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> BufStreamRaw<T> {
     }
 }
 
-impl Http2Frame {
+impl Http2Frame<Vec<u8>> {
     async fn read_frame<T: AsyncRead + AsyncWrite + Unpin + Send>(
         mut stream: BufStreamRaw<T>,
-    ) -> Self {
+    ) -> Http2Frame<Vec<u8>> {
         let stream = stream.get_mut();
         let mut buf = vec![0; 9];
         stream.read_exact(&mut buf).await.unwrap();
@@ -65,7 +71,9 @@ impl Http2Frame {
             payload,
         }
     }
+}
 
+impl<P: AsRef<[u8]>> Http2Frame<P> {
     fn encode(&self) -> Vec<u8> {
         let length = self.length;
         let mut buf = vec![0; 9 + length as usize];
@@ -77,7 +85,7 @@ impl Http2Frame {
         buf[3] = self.typ;
         buf[4] = self.flags;
         BigEndian::write_u32(&mut buf[5..], self.stream_id & ((1 << 31) - 1));
-        buf[9..].copy_from_slice(&self.payload);
+        buf[9..].copy_from_slice(self.payload.as_ref());
         buf
     }
 }
@@ -111,7 +119,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> From<HttpConn<T>> for Http2Conn<T
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
     async fn process_frame(
         &mut self,
-        frame: Http2Frame,
+        frame: Http2Frame<Vec<u8>>,
         decoder: &mut Decoder<'_>,
         tx: Sender<u32>,
         config_map: Arc<ConfigMap>,
@@ -180,20 +188,16 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
                     let response = unsafe { Arc::get_mut_unchecked(&mut response) };
 
                     if !read_body {
-                        println!("noread");
                         request.body.get_mut().write_body(None);
                     }
 
                     request.handle_request(response, config_map).await;
 
                     if read_body {
-                        println!("reading");
                         request.body.clone().get_body().await;
                     }
 
-                    println!("noread");
                     tx.send(stream_id).await.unwrap();
-                    println!("sent");
                 });
             }
             _ => (),
@@ -208,7 +212,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
         self.conn.flush().await.unwrap();
 
         let raw = BufStreamRaw(&mut self.conn);
-        println!("recv: {:?}", Http2Frame::read_frame(raw).await);
+        // println!("recv: {:?}", Http2Frame::read_frame(raw).await);
         let settings: &mut [u8] = &mut Http2Frame {
             length: 0,
             typ: 4,
@@ -250,7 +254,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
                 stream_id = rx.recv() => {
                     let stream_id = stream_id.unwrap();
                     let stream = self.streams.remove(&stream_id).unwrap();
-                    let (_, _, response) = Arc::into_inner(stream).unwrap().consume();
+                    let (_, request, response) = Arc::into_inner(stream).unwrap().consume();
                     let response = Arc::into_inner(response).unwrap();
                     let compressed_headers = encoder.encode(
                         [(":status".as_bytes(), response.status.to_string().as_bytes())]
@@ -259,6 +263,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
                                 response
                                     .headers
                                     .iter()
+                                    .filter(|(h,_)| *h != header::TRANSFER_ENCODING)
                                     .map(|(h, v)| (h.as_ref(), v.as_bytes())),
                             ),
                     );
@@ -270,26 +275,33 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
                         payload: compressed_headers,
                     };
 
-                    println!("writing!");
+                    let config = config_map
+                        .get_config_for_request(request.host.as_deref(), Some(&request.uri));
+                    let conf = get_plugin!(config, jequi);
+
                     self.conn
                         .write_all(&response_headers.encode())
                         .await
                         .unwrap();
                     self.conn.flush().await.unwrap();
 
-                    let response_body = Http2Frame {
-                        length: response.body_buffer.len() as u32,
-                        typ: 0,
-                        flags: END_STREAM_FLAG,
-                        stream_id,
-                        payload: response.body_buffer,
-                    };
 
-                    self.conn
-                        .write_all(&response_body.encode())
-                        .await
-                        .unwrap();
-                    self.conn.flush().await.unwrap();
+                    let last = response.body_buffer.len().div_ceil(conf.chunk_size) - 1;
+                    for (i, chunk) in response.body_buffer.chunks(conf.chunk_size).enumerate() {
+                        let response_body = Http2Frame {
+                            length: chunk.len() as u32,
+                            typ: 0,
+                            flags: if i == last {END_STREAM_FLAG} else {0},
+                            stream_id,
+                            payload: chunk,
+                        };
+
+                        self.conn
+                            .write_all(&response_body.encode())
+                            .await
+                            .unwrap();
+                        self.conn.flush().await.unwrap();
+                    }
 
                 }
             }

@@ -129,7 +129,7 @@ impl ConfigMap {
         main_conf
     }
 
-    pub fn get_config_for_request(&self, host: Option<&str>, uri: &str) -> &Vec<Plugin> {
+    pub fn get_config_for_request(&self, host: Option<&str>, uri: Option<&str>) -> &Vec<Plugin> {
         let mut config = &self.config;
         let mut uri_map = &self.uri;
         if let Some(host_map) = &self.host
@@ -139,6 +139,11 @@ impl ConfigMap {
             config = &host_config.config;
             uri_map = &host_config.uri;
         }
+
+        let uri = match uri {
+            Some(uri) => uri,
+            None => return config,
+        };
 
         let uri_map = match uri_map {
             Some(uri_map) => {
@@ -251,31 +256,31 @@ mod tests {
         );
 
         assert_eq!(
-            get_config(config_map.get_config_for_request(None, "/")).ip,
+            get_config(config_map.get_config_for_request(None, Some("/"))).ip,
             "1.1.1.1"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(Some("jequi.com"), "/test")).ip,
+            get_config(config_map.get_config_for_request(Some("jequi.com"), Some("/test"))).ip,
             "1.1.2.1"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(Some("jequi.com"), "/app/hello")).ip,
+            get_config(config_map.get_config_for_request(Some("jequi.com"), Some("/app/hello"))).ip,
             "1.1.2.2"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(Some("jequi.com"), "/api/")).ip,
+            get_config(config_map.get_config_for_request(Some("jequi.com"), Some("/api/"))).ip,
             "1.1.2.3"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(Some("www.jequi.com"), "/test")).ip,
+            get_config(config_map.get_config_for_request(Some("www.jequi.com"), Some("/test"))).ip,
             "1.1.3.1"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(None, "/app/hey")).ip,
+            get_config(config_map.get_config_for_request(None, Some("/app/hey"))).ip,
             "1.2.1.1"
         );
         assert_eq!(
-            get_config(config_map.get_config_for_request(None, "/test")).ip,
+            get_config(config_map.get_config_for_request(None, Some("/test"))).ip,
             "1.2.1.2"
         );
     }

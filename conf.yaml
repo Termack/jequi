@@ -1,16 +1,17 @@
 tls_active: true
-http2: true
 proxy_address: "www.google.com"
 host:
   jequi.com:
+    http2: true
+    chunk_size: 4000
     uri:
       /api:
         go_library_path: "target/debug/jequi_go.so"
       /app:
         static_files_path: "test/host/uri/"
     go_library_path: "target/debug/jequi_go.so"
-    # proxy_address: "www.google.com"
-    static_files_path: "test/"
+    proxy_address: "www.google.com"
+    # static_files_path: "test/"
 uri:
   /api/v2:
     go_library_path: "target/debug/jequi_go.so"

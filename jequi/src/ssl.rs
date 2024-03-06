@@ -1,24 +1,28 @@
 use http::version;
+use plugins::get_plugin;
 use std::fmt::Debug;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 
 use openssl::pkey::PKey;
 use openssl::ssl::{
-    AlpnError, SniError, Ssl, SslAcceptor, SslAlert, SslContextBuilder, SslMethod, SslRef,
+    AlpnError, NameType, SniError, Ssl, SslAcceptor, SslAlert, SslContextBuilder, SslMethod, SslRef,
 };
 use openssl::x509::X509;
 
 use tokio_openssl::SslStream;
 
-use crate::{HttpConn, RawStream};
+use crate::{ConfigMap, HttpConn, RawStream};
+
+use crate as jequi;
 
 static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
 static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
 impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin + Send> HttpConn<T> {
-    pub async fn ssl_new(stream: T, http2: bool) -> HttpConn<T> {
+    pub async fn ssl_new(stream: T, config_map: Arc<ConfigMap>) -> HttpConn<T> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         acceptor.set_servername_callback(
             move |ssl_ref: &mut SslRef, _ssl_alert: &mut SslAlert| -> Result<(), SniError> {
@@ -27,6 +31,10 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin + Send> HttpConn<T> {
                 let intermediate = X509::from_pem(INTERMEDIATE_CERT).unwrap();
 
                 let mut ctx_builder = SslContextBuilder::new(SslMethod::tls()).unwrap();
+                let config = config_map
+                    .get_config_for_request(ssl_ref.servername(NameType::HOST_NAME), None);
+                let conf = get_plugin!(config, jequi);
+                let http2 = conf.http2;
 
                 ctx_builder.set_private_key(&key).unwrap();
                 ctx_builder.set_certificate(&cert).unwrap();
@@ -72,6 +80,7 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin + Send> HttpConn<T> {
 #[cfg(test)]
 mod tests {
     use std::pin::Pin;
+    use std::sync::Arc;
 
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -79,7 +88,7 @@ mod tests {
     use openssl::ssl::{SslConnector, SslMethod};
     use tokio_openssl::SslStream;
 
-    use crate::{HttpConn, RawStream};
+    use crate::{ConfigMap, HttpConn, RawStream};
 
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
 
@@ -91,7 +100,7 @@ mod tests {
         tokio::spawn(async move {
             let stream = listener.accept().await.unwrap().0;
 
-            let req = HttpConn::ssl_new(stream, false).await;
+            let req = HttpConn::ssl_new(stream, Arc::new(ConfigMap::default())).await;
 
             if let RawStream::Ssl(mut stream) = req.conn.into_inner() {
                 stream.write_all(b"hello").await.unwrap()

@@ -28,13 +28,11 @@ impl Future for GetBody {
     type Output = Arc<Option<Vec<u8>>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        println!("is it written?");
         if !&self.body.is_written.load(Relaxed) {
             self.body.get_mut().waker = Some(cx.waker().clone());
             return Poll::Pending;
         }
 
-        println!("yees");
         Poll::Ready(self.body.clone().bytes.clone())
     }
 }

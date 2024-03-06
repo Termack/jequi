@@ -158,7 +158,7 @@ impl Request {
             &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
         );
 
-        let config = config_map.get_config_for_request(self.host.as_deref(), &self.uri);
+        let config = config_map.get_config_for_request(self.host.as_deref(), Some(&self.uri));
 
         for handle_plugin in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
             if let Some(fut) = handle_plugin(self, response) {
