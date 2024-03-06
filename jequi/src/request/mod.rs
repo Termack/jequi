@@ -103,10 +103,6 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
     type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        println!("sleeping");
-        block_on(sleep(Duration::from_secs(3)));
-        println!("slept");
-
         let content_length: usize = match &self.content_length {
             Ok(content_length) => *content_length,
             Err(err) => {

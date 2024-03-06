@@ -3,6 +3,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(byte_slice_trim_ascii)]
 #![feature(get_mut_unchecked)]
+#![feature(new_uninit)]
 pub mod body;
 pub mod config;
 pub mod http2;

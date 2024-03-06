@@ -34,7 +34,10 @@ impl<'a, T: AsyncRead + AsyncWrite + Debug + Unpin + Send> HttpConn<T> {
                 ctx_builder.set_alpn_protos(b"\x02h2\x08http/1.1").unwrap();
                 ctx_builder.set_alpn_select_callback(move |_, protos| {
                     if !http2 {
-                        return Ok(protos);
+                        if protos.windows(9).any(|window| window == b"\x08http/1.1") {
+                            return Ok(b"http/1.1");
+                        }
+                        return Err(AlpnError::NOACK);
                     }
                     if protos.windows(3).any(|window| window == b"\x02h2") {
                         Ok(b"h2")
