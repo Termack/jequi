@@ -37,11 +37,11 @@ For example the jequi_proxy adds the functionality for jequi to be used as a pro
 
 # How to use Jequi
 
-You must have Rust installed, first compile the binary: `cargo build --release`
+You must have Rust nightly setup, first compile the binary: `cargo build`
 
 If you want to use the jequi_go plugin, compile the go shared library using: `make go`
 
-Then run the compiled binary: `target/release/server`
+Then run the compiled binary: `target/debug/server`
 
 It will use the file `conf.yaml` in your current directory, you can change the config file and then reload it while the server is still running with `make reload`
 
