@@ -1,5 +1,5 @@
 #![feature(let_chains)]
-use jequi::http2::Http2Conn;
+use jequi::http2::conn::Http2Conn;
 use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
 use plugins::{get_plugin, load_plugins};
 use std::process;
