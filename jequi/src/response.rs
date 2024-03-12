@@ -1,9 +1,6 @@
-use std::{
-    cmp,
-    io::{Error, ErrorKind, Result},
-};
+use std::io::Result;
 
-use crate::{body::RequestBody, HttpConn, Response};
+use crate::{HttpConn, Response};
 use http::{header, HeaderMap, HeaderName, HeaderValue};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
@@ -91,22 +88,12 @@ impl Default for Response {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{Cell, UnsafeCell},
-        io::Cursor,
-        sync::{Arc, RwLock},
-    };
+    use std::{io::Cursor, sync::Arc};
 
     use http::HeaderMap;
-    use tokio::{
-        io::{AsyncReadExt, BufStream},
-        sync::Mutex,
-    };
+    use tokio::io::{AsyncReadExt, BufStream};
 
-    use crate::{
-        body::{self, RequestBody},
-        HttpConn, RawStream, Request, Response,
-    };
+    use crate::{body::RequestBody, HttpConn, RawStream, Request, Response};
 
     fn new_response(
         headers: HeaderMap,

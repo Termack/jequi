@@ -1,9 +1,8 @@
+#![allow(clippy::flat_map_identity)]
 #![feature(let_chains)]
 #![feature(closure_lifetime_binder)]
-use futures::executor::block_on;
 use futures::future::{BoxFuture, FutureExt};
-use http::header;
-use hyper::body::{self, HttpBody};
+use hyper::body::{self};
 use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
@@ -12,7 +11,7 @@ use serde_yaml::Value;
 use std::any::Any;
 use std::ffi::CStr;
 use std::fmt;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use trait_set::trait_set;

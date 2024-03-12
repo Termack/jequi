@@ -215,11 +215,11 @@ r
         let result = HttpConn::read_body(&mut req.conn, &req.request).await;
 
         let body = req.request.get_body().await;
-        let body = body.as_ref().as_ref().unwrap();
+        let body = body.as_ref().as_ref();
 
         match &expected_results[i] {
             Ok(expected_success) => assert_eq!(
-                expected_success,
+                Some(expected_success),
                 body,
                 "Testing read body for request: {}",
                 String::from_utf8_lossy(r)

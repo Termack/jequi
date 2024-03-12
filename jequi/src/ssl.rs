@@ -1,9 +1,8 @@
-use http::version;
 use plugins::get_plugin;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use openssl::pkey::PKey;
 use openssl::ssl::{
@@ -88,7 +87,7 @@ mod tests {
     use openssl::ssl::{SslConnector, SslMethod};
     use tokio_openssl::SslStream;
 
-    use crate::{ConfigMap, HttpConn, RawStream};
+    use crate::{Config, ConfigMap, HttpConn, Plugin, RawStream, RequestHandler};
 
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
 
@@ -100,7 +99,13 @@ mod tests {
         tokio::spawn(async move {
             let stream = listener.accept().await.unwrap().0;
 
-            let req = HttpConn::ssl_new(stream, Arc::new(ConfigMap::default())).await;
+            let mut main_conf = ConfigMap::default();
+            main_conf.config.push(Plugin {
+                config: Arc::new(Config::default()),
+                request_handler: RequestHandler(None),
+            });
+
+            let req = HttpConn::ssl_new(stream, Arc::new(main_conf)).await;
 
             if let RawStream::Ssl(mut stream) = req.conn.into_inner() {
                 stream.write_all(b"hello").await.unwrap()

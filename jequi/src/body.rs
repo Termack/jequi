@@ -1,4 +1,3 @@
-use std::io::Result;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;

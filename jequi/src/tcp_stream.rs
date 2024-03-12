@@ -1,4 +1,3 @@
-use http::version;
 use std::{
     io::{IoSlice, Result},
     pin::Pin,

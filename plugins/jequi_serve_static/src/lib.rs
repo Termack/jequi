@@ -5,8 +5,7 @@ use serde_yaml::Value;
 use std::{
     any::Any,
     fmt,
-    fs::File,
-    io::{ErrorKind, Read},
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -91,7 +90,7 @@ impl Config {
         }
     }
 
-    fn handle_request(&self, req: &mut Request, resp: &mut Response) {
+    fn handle_request(&self, req: &Request, resp: &mut Response) {
         let final_path = &mut PathBuf::new();
         match self.static_files_path.as_ref().unwrap() {
             PathKind::File(file_path) => final_path.push(file_path),
@@ -164,7 +163,6 @@ mod tests {
     use std::{
         fs::{self, File},
         io::Cursor,
-        ops::Not,
         os::unix::prelude::PermissionsExt,
         path::Path,
     };
@@ -180,10 +178,12 @@ mod tests {
         // Normal test
         http.request.uri = "/file".to_string();
 
-        let mut conf = Config::default();
-        conf.static_files_path = Some(PathKind::Dir(TEST_PATH.into()));
+        let mut conf = Config {
+            static_files_path: Some(PathKind::Dir(TEST_PATH.into())),
+            ..Default::default()
+        };
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");
@@ -192,7 +192,7 @@ mod tests {
         http.request.uri = "/file/./../../file".to_string();
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");
@@ -210,7 +210,7 @@ mod tests {
         http.request.uri = "/noperm".to_string();
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 403);
         assert_eq!(&http.response.body_buffer[..], b"");
@@ -219,7 +219,7 @@ mod tests {
         http.request.uri = "/notfound".to_string();
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 404);
         assert_eq!(&http.response.body_buffer[..], b"");
@@ -230,7 +230,7 @@ mod tests {
         http.request.uri = "/uri/file".to_string();
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");
@@ -242,7 +242,7 @@ mod tests {
         http.request.uri = "/blablabla".to_string();
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");

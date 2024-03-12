@@ -14,10 +14,9 @@ pub mod tcp_stream;
 
 use std::{
     any::Any,
-    cell::{Cell, UnsafeCell},
     collections::HashMap,
     fmt::{self, Debug},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use body::RequestBody;
@@ -25,10 +24,7 @@ use futures::future::BoxFuture;
 use http::HeaderMap;
 use serde::Deserialize;
 use serde_yaml::Value;
-use tokio::{
-    io::{AsyncRead, AsyncWrite, BufStream},
-    sync::Mutex,
-};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio_openssl::SslStream;
 use trait_set::trait_set;
 

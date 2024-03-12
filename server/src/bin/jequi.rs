@@ -4,7 +4,7 @@ use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
 use plugins::{get_plugin, load_plugins};
 use std::process;
 use std::{fs, io::ErrorKind, sync::Arc};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},

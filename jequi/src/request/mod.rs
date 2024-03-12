@@ -1,18 +1,16 @@
+#![allow(clippy::flat_map_identity)]
 use chrono::Utc;
-use futures::{executor::block_on, Future, FutureExt};
+use futures::Future;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use std::{
-    cell::UnsafeCell,
     io::{Error, ErrorKind, Result},
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::Arc,
     task::{ready, Context, Poll},
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufStream},
     pin,
-    sync::Mutex,
-    time::{sleep, Duration},
 };
 
 use crate::{
@@ -114,10 +112,17 @@ impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
         let mut bytes: Vec<u8> = vec![0; content_length];
         let read_exact = self.conn.read_exact(&mut bytes);
         pin!(read_exact);
-        ready!(read_exact.poll(cx))?;
 
-        self.body.clone().get_mut().write_body(Some(bytes));
-        Poll::Ready(Ok(()))
+        match ready!(read_exact.poll(cx)) {
+            Ok(_) => {
+                self.body.clone().get_mut().write_body(Some(bytes));
+                Poll::Ready(Ok(()))
+            }
+            Err(e) => {
+                self.body.clone().get_mut().write_body(None);
+                Poll::Ready(Err(e))
+            }
+        }
     }
 }
 

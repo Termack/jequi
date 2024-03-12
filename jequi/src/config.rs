@@ -35,29 +35,6 @@ impl JequiConfig for Config {
     }
 }
 
-fn merge_yaml(a: &mut Value, b: Value) {
-    match (a, b) {
-        (Value::Mapping(ref mut a), Value::Mapping(b)) => {
-            for (k, v) in b {
-                if let Some(b_seq) = v.as_sequence()
-                && let Some(a_val) = a.get(&k)
-                && let Some(a_seq) = a_val.as_sequence()
-            {
-                a[&k] = [a_seq.as_slice(), b_seq.as_slice()].concat().into();
-                continue;
-            }
-
-                if !a.contains_key(&k) {
-                    a.insert(k, v);
-                } else {
-                    merge_yaml(&mut a[&k], v);
-                }
-            }
-        }
-        (a, b) => *a = b,
-    }
-}
-
 fn merge_config_and_load_plugins(
     mut _config_parser: &mut Value,
     config_to_merge: &mut Value,

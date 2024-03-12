@@ -1,5 +1,5 @@
 use hpack_patched::{Decoder, Encoder};
-use http::{header, HeaderName};
+use http::header;
 use plugins::get_plugin;
 use std::{collections::HashMap, sync::Arc};
 
@@ -19,8 +19,6 @@ use crate::{
 use crate as jequi;
 
 use super::{frame::Http2Frame, Stream, END_STREAM_FLAG};
-
-const KEEP_ALIVE: HeaderName = HeaderName::from_static("keep-alive");
 
 pub struct Http2Conn<T: AsyncRead + AsyncWrite + Unpin + Send> {
     pub conn: BufStream<RawStream<T>>,
@@ -55,11 +53,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
                     response
                         .headers
                         .iter()
-                        .filter(|(h, _)| {
-                            !matches!(
-                                **h,
-                                header::TRANSFER_ENCODING | header::CONNECTION | KEEP_ALIVE
-                            )
+                        .filter(|(h, _)| match **h {
+                            header::TRANSFER_ENCODING | header::CONNECTION => false,
+                            _ if (**h == "keep-alive") => false,
+                            _ => true,
                         })
                         .map(|(h, v)| (h.as_ref(), v.as_bytes())),
                 ),
