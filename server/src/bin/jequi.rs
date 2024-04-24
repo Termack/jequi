@@ -1,10 +1,9 @@
 #![feature(let_chains)]
-use jequi::http2::conn::Http2Conn;
-use jequi::{Config, ConfigMap, HttpConn, RawStream, Request, Response};
-use plugins::{get_plugin, load_plugins};
+use jequi::tcp_stream::new_http_conn;
+use jequi::{Config, ConfigMap};
+use plugins::load_plugins;
 use std::process;
-use std::{fs, io::ErrorKind, sync::Arc};
-use tokio::io::{AsyncRead, AsyncWrite};
+use std::{fs, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},
@@ -14,62 +13,9 @@ use tokio::{
 
 load_plugins!();
 
-async fn handle_request<T: AsyncRead + AsyncWrite + Unpin + Send>(
-    conf: &Config,
-    http: &mut HttpConn<T>,
-    config_map: Arc<ConfigMap>,
-) {
-    http.parse_first_line().await.unwrap();
-
-    http.parse_headers().await.unwrap();
-
-    // TODO: Read the body only if needed (remember to consume stream if body not read)
-    let read_body = HttpConn::read_body(&mut http.conn, &http.request);
-
-    let request = &mut http.request;
-    tokio_scoped::scope(|scope| {
-        scope.spawn(async move {
-            match read_body.await {
-                Ok(_) => (),
-                Err(ref e) if e.kind() == ErrorKind::NotFound => (),
-                Err(e) => panic!("Error reading request body: {}", e),
-            };
-            println!("body was read :)");
-        });
-
-        scope.spawn(async {
-            request.handle_request(&mut http.response, config_map).await;
-        });
-    });
-
-    http.write_response(conf.chunk_size).await.unwrap();
-}
-
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
-    let mut http: HttpConn<TcpStream>;
-    let plugin_list = &config_map.config;
-    let conf = get_plugin!(plugin_list, jequi);
-
-    if conf.tls_active {
-        http = HttpConn::ssl_new(stream, config_map.clone()).await;
-    } else {
-        http = HttpConn::new(RawStream::Normal(stream))
-    }
-
-    if http.version == "h2" {
-        let mut http = Http2Conn::from(http);
-        http.process_http2(config_map).await;
-        return;
-    }
-
-    handle_request(conf, &mut http, config_map.clone()).await;
-    if let Some(connection) = http.request.headers.get("connection") && connection.to_str().unwrap().to_lowercase() == "keep-alive" {
-        loop {
-            http.request = Request::new();
-            http.response = Response::new();
-            handle_request(conf, &mut http, config_map.clone()).await;
-        }
-    }
+    let mut http = new_http_conn(stream, config_map.clone()).await;
+    http.handle_connection(config_map).await;
 }
 
 async fn listen_reload(config_map: Arc<RwLock<Arc<ConfigMap>>>) {

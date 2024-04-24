@@ -464,6 +464,7 @@ dependencies = [
  "serde_yaml",
  "tokio",
  "tokio-openssl",
+ "tokio-scoped",
  "trait-set",
 ]
 
@@ -885,7 +886,6 @@ dependencies = [
  "plugins",
  "serde_yaml",
  "tokio",
- "tokio-scoped",
 ]
 
 [[package]]
@@ -1021,9 +1021,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
+checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
 dependencies = [
  "futures-core",
  "pin-project-lite",

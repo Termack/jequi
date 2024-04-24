@@ -6,6 +6,7 @@
 #![feature(new_uninit)]
 pub mod body;
 pub mod config;
+pub mod http1;
 pub mod http2;
 pub mod request;
 pub mod response;
@@ -22,9 +23,11 @@ use std::{
 use body::RequestBody;
 use futures::future::BoxFuture;
 use http::HeaderMap;
+use http1::Http1Conn;
+use http2::conn::Http2Conn;
 use serde::Deserialize;
 use serde_yaml::Value;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_openssl::SslStream;
 use trait_set::trait_set;
 
@@ -125,9 +128,16 @@ pub struct Response {
     pub body_buffer: Vec<u8>,
 }
 
-pub struct HttpConn<T: AsyncRead + AsyncWrite + Unpin + Send> {
-    pub conn: BufStream<RawStream<T>>,
-    pub version: String,
-    pub request: Request,
-    pub response: Response,
+pub enum HttpConn<T: AsyncRead + AsyncWrite + Unpin + Send> {
+    HTTP1(Http1Conn<T>),
+    HTTP2(Http2Conn<T>),
+}
+
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
+    pub async fn handle_connection(&mut self, config_map: Arc<ConfigMap>) {
+        match self {
+            HttpConn::HTTP1(ref mut conn) => conn.handle_connection(config_map).await,
+            HttpConn::HTTP2(ref mut conn) => conn.handle_connection(config_map).await,
+        }
+    }
 }

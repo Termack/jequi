@@ -2,7 +2,7 @@
 use futures::future::FutureExt;
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
 use jequi_proxy::RequestProxyHandler;
-use libloading::{self, Library};
+use libloading::Library;
 use plugins::get_plugin;
 use serde::Deserialize;
 use serde_yaml::Value;
@@ -121,7 +121,7 @@ mod tests {
 
     use std::{io::Cursor, process::Command};
 
-    use jequi::{HttpConn, JequiConfig, RawStream};
+    use jequi::{http1::Http1Conn, JequiConfig, RawStream};
     use serde_yaml::{Mapping, Value};
 
     use crate::Config;
@@ -129,7 +129,7 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn handle_go_request() {
-        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])));
+        let mut http = Http1Conn::new(RawStream::Normal(Cursor::new(vec![])));
 
         let output = Command::new("go")
             .args([

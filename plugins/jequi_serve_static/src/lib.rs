@@ -167,13 +167,13 @@ mod tests {
         path::Path,
     };
 
-    use jequi::{HttpConn, RawStream};
+    use jequi::{http1::Http1Conn, RawStream};
 
     use crate::{Config, PathKind};
 
     #[tokio::test]
     async fn handle_static_files_test() {
-        let mut http = HttpConn::new(RawStream::Normal(Cursor::new(vec![])));
+        let mut http = Http1Conn::new(RawStream::Normal(Cursor::new(vec![])));
 
         // Normal test
         http.request.uri = "/file".to_string();

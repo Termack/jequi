@@ -16,7 +16,6 @@ api = { path = "../api" }
 indexmap = "1.9.1"
 jequi = { path = "../jequi" }
 tokio = { version = "1", features = ["full"] }
-tokio-scoped = "0.2.0"
 serde_yaml = "0.9.25"
 plugins = { path = "../plugins" }
 jequi_go = { path = "../plugins/jequi_go" }

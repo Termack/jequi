@@ -1,11 +1,17 @@
+use plugins::get_plugin;
 use std::{
     io::{IoSlice, Result},
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::{HttpConn, RawStream, Request, Response};
+use crate::{
+    http1::Http1Conn, http2::conn::Http2Conn, ssl::ssl_new, ConfigMap, HttpConn, RawStream,
+};
+
+use crate as jequi;
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for RawStream<S> {
     fn poll_read(
@@ -65,20 +71,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for RawStream<S> {
     }
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> HttpConn<T> {
-    pub fn with_version(stream: RawStream<T>, version: String) -> HttpConn<T> {
-        HttpConn {
-            version,
-            ..HttpConn::new(stream)
-        }
-    }
+pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send>(
+    stream: T,
+    config_map: Arc<ConfigMap>,
+) -> HttpConn<T> {
+    let plugin_list = &config_map.config;
+    let conf = get_plugin!(plugin_list, jequi);
 
-    pub fn new(stream: RawStream<T>) -> HttpConn<T> {
-        HttpConn {
-            conn: BufStream::new(stream),
-            version: String::new(),
-            request: Request::new(),
-            response: Response::new(),
+    if conf.tls_active {
+        let (stream, version) = ssl_new(stream, config_map.clone()).await;
+        if version == "h2" {
+            return HttpConn::HTTP2(Http2Conn::new(stream));
         }
+        return HttpConn::HTTP1(Http1Conn::new(stream));
     }
+    HttpConn::HTTP1(Http1Conn::new(RawStream::Normal(stream)))
 }

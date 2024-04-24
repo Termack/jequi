@@ -2,9 +2,9 @@ use std::io::Cursor;
 
 use http::HeaderMap;
 
-use crate::RawStream;
+use crate::{http1::Http1Conn, RawStream};
 
-use super::*;
+use std::io::{Error, ErrorKind, Result};
 
 #[tokio::test]
 async fn parse_first_line_test() {
@@ -50,7 +50,7 @@ async fn parse_first_line_test() {
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
 
         let err = req.parse_first_line().await;
 
@@ -132,7 +132,7 @@ hello world"
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
 
         req.parse_first_line().await.unwrap();
 
@@ -206,13 +206,13 @@ r
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = HttpConn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
 
         req.parse_first_line().await.unwrap();
 
         req.parse_headers().await.unwrap();
 
-        let result = HttpConn::read_body(&mut req.conn, &req.request).await;
+        let result = Http1Conn::read_body(&mut req.conn, &req.request).await;
 
         let body = req.request.get_body().await;
         let body = body.as_ref().as_ref();
