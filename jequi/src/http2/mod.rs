@@ -23,3 +23,6 @@ impl Stream {
         (self.id, self.request, self.response)
     }
 }
+
+#[cfg(test)]
+mod test;

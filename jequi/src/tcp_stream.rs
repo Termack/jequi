@@ -76,7 +76,7 @@ pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send>(
     config_map: Arc<ConfigMap>,
 ) -> HttpConn<T> {
     let plugin_list = &config_map.config;
-    let conf = get_plugin!(plugin_list, jequi);
+    let conf = get_plugin!(plugin_list, jequi).unwrap();
 
     if conf.tls_active {
         let (stream, version) = ssl_new(stream, config_map.clone()).await;

@@ -33,7 +33,7 @@ pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
             let mut ctx_builder = SslContextBuilder::new(SslMethod::tls()).unwrap();
             let config =
                 config_map.get_config_for_request(ssl_ref.servername(NameType::HOST_NAME), None);
-            let conf = get_plugin!(config, jequi);
+            let conf = get_plugin!(config, jequi).unwrap();
             let http2 = conf.http2;
 
             ctx_builder.set_private_key(&key).unwrap();

@@ -31,7 +31,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
     }
     pub async fn handle_connection(&mut self, config_map: Arc<ConfigMap>) {
         let plugin_list = &config_map.config;
-        let conf = get_plugin!(plugin_list, jequi);
+        let conf = get_plugin!(plugin_list, jequi).unwrap();
 
         self.handle_request(conf, config_map.clone()).await;
         if let Some(connection) = self.request.headers.get("connection")

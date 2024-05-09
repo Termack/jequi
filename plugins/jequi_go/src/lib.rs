@@ -126,7 +126,6 @@ mod tests {
 
     use crate::Config;
 
-    #[ignore]
     #[tokio::test]
     async fn handle_go_request() {
         let mut http = Http1Conn::new(RawStream::Normal(Cursor::new(vec![])));

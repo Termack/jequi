@@ -61,26 +61,33 @@ pub fn get_plugin(input: TokenStream) -> TokenStream {
         Some(plugin_type) => {
             if plugin_type == "Option" {
                 if input.mutability.is_some() {
-                    quote!(#list[#index].as_mut().map(|plugin| {
+                    quote!(match #list.get_mut(#index) {
+                    Some(config) => config.as_mut().map(|plugin| {
                         unsafe { Arc::get_mut_unchecked(&mut plugin.config) }
-                            .as_any_mut()
-                            .downcast_mut::<#plugin_name::Config>()
-                            .unwrap()
-                    }))
+                        .as_any_mut()
+                        .downcast_mut::<#plugin_name::Config>()
+                        .unwrap()}),
+                    None => None,
+                    })
                 } else {
-                    quote!(#list[#index].as_mut().map(|plugin| {
+                    quote!(match #list.get(#index){
+                        Some(config) => config.as_mut().map(|plugin| {
                         plugin.config
                             .as_any()
                             .downcast_ref::<#plugin_name::Config>()
-                            .unwrap()
-                    }))
+                            .unwrap()}),
+                        None => None,
+                    })
                 }
             } else {
                 return quote! {compile_error!("invalid plugin name")}.into();
             }
         }
         None => {
-            quote!(#list[#index].config.as_any().downcast_ref::<#plugin_name::Config>().unwrap())
+            quote!(match #list.get(#index) {
+                Some(config) => config.config.as_any().downcast_ref::<#plugin_name::Config>(),
+                None => None,
+            })
         }
     };
 

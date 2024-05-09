@@ -68,7 +68,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
         );
 
         let config = config_map.get_config_for_request(request.host.as_deref(), Some(&request.uri));
-        let conf = get_plugin!(config, jequi);
+        let conf = get_plugin!(config, jequi).unwrap();
 
         self.conn
             .write_all(&response_headers.encode())
@@ -76,7 +76,16 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
             .unwrap();
         self.conn.flush().await.unwrap();
 
-        let last = response.body_buffer.len().div_ceil(conf.chunk_size) - 1;
+        let body_len = response.body_buffer.len();
+        if body_len == 0 {
+            let response_body = Http2Frame::new(FrameType::Data, END_STREAM_FLAG, stream_id, b"");
+
+            self.conn.write_all(&response_body.encode()).await.unwrap();
+            self.conn.flush().await.unwrap();
+            return;
+        }
+
+        let last = body_len.div_ceil(conf.chunk_size) - 1;
         for (i, chunk) in response.body_buffer.chunks(conf.chunk_size).enumerate() {
             let response_body = Http2Frame::new(
                 FrameType::Data,
