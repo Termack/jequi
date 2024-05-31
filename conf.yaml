@@ -1,7 +1,11 @@
 tls_active: true
 proxy_address: "www.google.com"
+ssl_certificate: jequi/test/leaf-cert.pem
+ssl_key: jequi/test/leaf-cert.key
 host:
   jequi.com:
+    ssl_certificate: jequi/test/leaf-cert.pem
+    ssl_key: jequi/test/leaf-cert.key
     http2: true
     chunk_size: 4000
     uri:

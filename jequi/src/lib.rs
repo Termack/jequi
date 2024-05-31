@@ -20,6 +20,8 @@ use std::{
     sync::Arc,
 };
 
+use openssl::pkey::{PKey, Private};
+
 use body::RequestBody;
 use futures::future::BoxFuture;
 use http::HeaderMap;
@@ -106,6 +108,8 @@ pub struct Config {
     pub tls_active: bool,
     pub http2: bool,
     pub chunk_size: usize,
+    pub ssl_key: Option<ssl::SslKeyConfig>,
+    pub ssl_certificate: Option<ssl::SslCertConfig>,
 }
 
 pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin + Send> {

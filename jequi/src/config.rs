@@ -13,6 +13,8 @@ impl Default for Config {
             tls_active: false,
             http2: false,
             chunk_size: 1024 * 64,
+            ssl_certificate: None,
+            ssl_key: None,
         }
     }
 }
@@ -110,8 +112,8 @@ impl ConfigMap {
         let mut config = &self.config;
         let mut uri_map = &self.uri;
         if let Some(host_map) = &self.host
-        && let Some(host) = host
-        && let Some(host_config) = host_map.get(host.split(':').next().unwrap())
+            && let Some(host) = host
+            && let Some(host_config) = host_map.get(host.split(':').next().unwrap())
         {
             config = &host_config.config;
             uri_map = &host_config.uri;

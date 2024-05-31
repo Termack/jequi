@@ -1,9 +1,12 @@
+use core::fmt;
 use plugins::get_plugin;
+use serde::{de, Deserialize};
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use openssl::pkey::PKey;
+use openssl::pkey::{PKey, Private};
 use openssl::ssl::{
     AlpnError, NameType, SniError, Ssl, SslAcceptor, SslAlert, SslContextBuilder, SslMethod, SslRef,
 };
@@ -19,6 +22,100 @@ static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
 static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
 static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
+#[derive(Clone, Debug)]
+pub struct SslKeyConfig(PKey<Private>);
+
+impl<'de> Deserialize<'de> for SslKeyConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SslKeyConfigVisitor;
+
+        impl<'de> de::Visitor<'de> for SslKeyConfigVisitor {
+            type Value = SslKeyConfig;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("SslKeyConfig")
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&v)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let path = PathBuf::from(v);
+                if !path.exists() {
+                    return Err(E::custom(format!("path doesn't exist: {}", path.display())));
+                }
+
+                let content = std::fs::read(path).unwrap();
+                PKey::private_key_from_pem(&content)
+                    .map(|key| SslKeyConfig(key))
+                    .map_err(|err| E::custom(err.to_string()))
+            }
+        }
+
+        deserializer.deserialize_string(SslKeyConfigVisitor {})
+    }
+}
+
+impl PartialEq for SslKeyConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.public_eq(other.0.as_ref())
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct SslCertConfig(Vec<X509>);
+
+impl<'de> Deserialize<'de> for SslCertConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SslCertConfigVisitor;
+
+        impl<'de> de::Visitor<'de> for SslCertConfigVisitor {
+            type Value = SslCertConfig;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("SslKeyConfig")
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&v)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let path = PathBuf::from(v);
+                if !path.exists() {
+                    return Err(E::custom(format!("path doesn't exist: {}", path.display())));
+                }
+
+                let content = std::fs::read(path).unwrap();
+                X509::stack_from_pem(&content)
+                    .map(|cert| SslCertConfig(cert))
+                    .map_err(|err| E::custom(err.to_string()))
+            }
+        }
+
+        deserializer.deserialize_string(SslCertConfigVisitor {})
+    }
+}
+
 pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
     stream: T,
     config_map: Arc<ConfigMap>,
@@ -26,9 +123,9 @@ pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     acceptor.set_servername_callback(
         move |ssl_ref: &mut SslRef, _ssl_alert: &mut SslAlert| -> Result<(), SniError> {
-            let key = PKey::private_key_from_pem(LEAF_KEY).unwrap();
-            let cert = X509::from_pem(LEAF_CERT).unwrap();
-            let intermediate = X509::from_pem(INTERMEDIATE_CERT).unwrap();
+            // let key = PKey::private_key_from_pem(LEAF_KEY).unwrap();
+            // let cert = X509::from_pem(LEAF_CERT).unwrap();
+            // let intermediate = X509::from_pem(INTERMEDIATE_CERT).unwrap();
 
             let mut ctx_builder = SslContextBuilder::new(SslMethod::tls()).unwrap();
             let config =
@@ -36,9 +133,14 @@ pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
             let conf = get_plugin!(config, jequi).unwrap();
             let http2 = conf.http2;
 
-            ctx_builder.set_private_key(&key).unwrap();
-            ctx_builder.set_certificate(&cert).unwrap();
-            ctx_builder.add_extra_chain_cert(intermediate).unwrap();
+            ctx_builder
+                .set_private_key(&conf.ssl_key.as_ref().unwrap().0)
+                .unwrap();
+            let mut chain = conf.ssl_certificate.as_ref().unwrap().0.iter();
+            ctx_builder.set_certificate(chain.next().unwrap()).unwrap();
+            for cert in chain {
+                ctx_builder.add_extra_chain_cert(cert.clone()).unwrap();
+            }
             ctx_builder.set_alpn_protos(b"\x02h2\x08http/1.1").unwrap();
             ctx_builder.set_alpn_select_callback(move |_, protos| {
                 if !http2 {
