@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: jequi
+  IMAGE_NAME: termack/jequi
 
 jobs:
   build-and-push-image:
