@@ -1,4 +1,4 @@
-export LIB_DIR=$(PWD)/target/debug
+export LIB_DIR=$(PWD)
 export LIB_NAME=jequi_go
 export HANDLER_PATH=../handle
 

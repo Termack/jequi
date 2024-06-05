@@ -39,7 +39,7 @@ For example the jequi_proxy adds the functionality for jequi to be used as a pro
 
 ## Running on docker
 
-You can run on docker using the docker-compose.yml file as an example, also, there's an image available at `ghcr.io/jequi`
+You can run on docker using the docker-compose.yml file as an example, also, there's an image available at `ghcr.io/termack/jequi`
 
 ## Running locally
 
