@@ -48,6 +48,8 @@ async fn main() {
 
     let listener = TcpListener::bind(address).await.unwrap();
 
+    println!("Jequi server started!");
+
     loop {
         let (stream, _) = listener.accept().await.unwrap();
         let config = config.read().await.clone();

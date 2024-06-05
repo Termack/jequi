@@ -183,12 +183,17 @@ mod tests {
     use std::pin::Pin;
     use std::sync::Arc;
 
+    use serde::de::value::{Error, StrDeserializer};
+    use serde::de::IntoDeserializer;
+    use serde::Deserialize;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
 
     use openssl::ssl::{SslConnector, SslMethod};
     use tokio_openssl::SslStream;
 
+    use crate::ssl::{SslCertConfig, SslKeyConfig};
+    use crate::JequiConfig;
     use crate::{http1::Http1Conn, Config, ConfigMap, Plugin, RawStream, RequestHandler};
 
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
@@ -202,8 +207,24 @@ mod tests {
             let stream = listener.accept().await.unwrap().0;
 
             let mut main_conf = ConfigMap::default();
+
+            let conf = Config {
+                ssl_certificate: Some(
+                    SslCertConfig::deserialize::<StrDeserializer<'_, Error>>(
+                        "test/leaf-cert.pem".into_deserializer(),
+                    )
+                    .unwrap(),
+                ),
+                ssl_key: Some(
+                    SslKeyConfig::deserialize::<StrDeserializer<'_, Error>>(
+                        "test/leaf-cert.key".into_deserializer(),
+                    )
+                    .unwrap(),
+                ),
+                ..Config::default()
+            };
             main_conf.config.push(Plugin {
-                config: Arc::new(Config::default()),
+                config: Arc::new(conf),
                 request_handler: RequestHandler(None),
             });
 

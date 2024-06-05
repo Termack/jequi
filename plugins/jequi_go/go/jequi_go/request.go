@@ -1,6 +1,6 @@
 package jequi_go
 
-//#cgo LDFLAGS: -L${SRCDIR}/../../../../target/debug -Wl,-rpath=${SRCDIR}/../../../../target/debug -ljequi -ldl
+//#cgo LDFLAGS: -L/etc/jequi -Wl,-rpath=/etc/jequi -ljequi -ldl
 //#include <stdlib.h>
 //extern char* get_request_header(void* req, char* header);
 //extern char* get_request_body(void* req);

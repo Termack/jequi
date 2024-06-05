@@ -37,6 +37,12 @@ For example the jequi_proxy adds the functionality for jequi to be used as a pro
 
 # How to use Jequi
 
+## Running on docker
+
+You can run on docker using the docker-compose.yml file as an example, also, there's an image available at `ghcr.io/jequi`
+
+## Running locally
+
 You must have Rust nightly setup, first compile the binary: `cargo build`
 
 If you want to use the jequi_go plugin, compile the go shared library using: `make go`

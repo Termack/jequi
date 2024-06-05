@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  jequi:
+    image: jequi
+    ports:
+      - "7878:7878"
+    volumes:
+      - ./target/debug/jequi_go.so:/etc/jequi/jequi_go.so
+      - ./etc/jequi/conf.yaml:/etc/jequi/conf.yaml

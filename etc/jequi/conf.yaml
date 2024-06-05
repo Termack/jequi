@@ -1,0 +1,6 @@
+ip: 0.0.0.0
+tls_active: true
+ssl_certificate: ssl/leaf-cert.pem
+ssl_key: ssl/leaf-cert.key
+static_files_path: static/
+go_library_path: /etc/jequi/jequi_go.so

@@ -2,6 +2,7 @@ tls_active: true
 proxy_address: "www.google.com"
 ssl_certificate: jequi/test/leaf-cert.pem
 ssl_key: jequi/test/leaf-cert.key
+go_library_path: "target/debug/jequi_go.so"
 host:
   jequi.com:
     ssl_certificate: jequi/test/leaf-cert.pem
