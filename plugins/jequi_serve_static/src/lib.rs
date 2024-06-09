@@ -1,3 +1,5 @@
+mod content_type;
+use derivative::Derivative;
 use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
 use serde::{de, Deserialize};
 use serde_yaml::Value;
@@ -76,33 +78,30 @@ impl Default for PathKind {
     }
 }
 
-#[derive(Deserialize, Clone, Default, Debug, PartialEq)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Derivative)]
+#[derivative(Default)]
+#[serde(default)]
 pub struct Config {
     pub static_files_path: Option<PathKind>,
-    uri: Option<String>,
+    #[derivative(Default(value = "true"))]
+    pub infer_content_type: bool,
+    config_path: Option<String>,
 }
 
 impl Config {
-    pub const fn new() -> Self {
-        Config {
-            static_files_path: None,
-            uri: None,
-        }
-    }
-
     fn handle_request(&self, req: &Request, resp: &mut Response) {
         let final_path = &mut PathBuf::new();
         match self.static_files_path.as_ref().unwrap() {
             PathKind::File(file_path) => final_path.push(file_path),
-            PathKind::Dir(path) => {
-                let mut uri = req.uri.as_str();
-                if let Some(uri_config) = self.uri.as_deref() {
-                    uri = uri.strip_prefix(uri_config).unwrap_or(uri);
+            PathKind::Dir(dir_path) => {
+                let mut path = req.uri.path();
+                if let Some(path_config) = self.config_path.as_deref() {
+                    path = path.strip_prefix(path_config).unwrap_or(path);
                 }
-                uri = uri.trim_start_matches('/');
+                path = path.trim_start_matches('/');
 
                 let mut file_path = PathBuf::new();
-                for p in Path::new(uri) {
+                for p in Path::new(path) {
                     if p == ".." {
                         file_path.pop();
                     } else {
@@ -114,12 +113,12 @@ impl Config {
                     file_path.push("index.html")
                 }
 
-                final_path.push(path);
+                final_path.push(dir_path);
                 final_path.push(file_path);
             }
         };
 
-        match std::fs::read(final_path) {
+        match std::fs::read(&final_path) {
             Ok(content) => resp.write_body(&content).unwrap(),
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 resp.status = 403;
@@ -132,6 +131,12 @@ impl Config {
         };
 
         resp.status = 200;
+
+        if self.infer_content_type {
+            if let Some(content_type) = content_type::get_content_type_by_path(final_path) {
+                resp.set_header("Content-Type", content_type);
+            }
+        }
     }
 }
 
@@ -167,35 +172,59 @@ mod tests {
         path::Path,
     };
 
-    use jequi::{http1::Http1Conn, RawStream};
+    use http::HeaderValue;
+    use jequi::{http1::Http1Conn, RawStream, Uri};
+    use tokio::io::{AsyncRead, AsyncWrite};
 
     use crate::{Config, PathKind};
+
+    fn test_handle_request<T: AsyncRead + AsyncWrite + Unpin + Send>(
+        conf: &Config,
+        http: &mut Http1Conn<T>,
+        uri: &str,
+        expected_status: usize,
+        expected_resp: &[u8],
+    ) {
+        http.request.uri = Uri::from(uri.to_string());
+        http.response.body_buffer.truncate(0);
+
+        conf.handle_request(&http.request, &mut http.response);
+
+        assert_eq!(
+            http.response.status, expected_status,
+            "status error for {}",
+            uri
+        );
+        assert_eq!(
+            &http.response.body_buffer[..],
+            expected_resp,
+            "response error for {}",
+            uri
+        );
+    }
 
     #[tokio::test]
     async fn handle_static_files_test() {
         let mut http = Http1Conn::new(RawStream::Normal(Cursor::new(vec![])));
-
-        // Normal test
-        http.request.uri = "/file".to_string();
 
         let mut conf = Config {
             static_files_path: Some(PathKind::Dir(TEST_PATH.into())),
             ..Default::default()
         };
 
-        conf.handle_request(&http.request, &mut http.response);
+        // Normal test
+        test_handle_request(&conf, &mut http, "/file", 200, b"hello");
 
-        assert_eq!(http.response.status, 200);
-        assert_eq!(&http.response.body_buffer[..], b"hello");
+        // Content type test
+        test_handle_request(&conf, &mut http, "/aa.js", 200, b"console.log(\"a\")\n");
+
+        assert_eq!(
+            http.response.get_header("Content-Type"),
+            Some(&HeaderValue::from_static("text/javascript"))
+        );
 
         // lfi test
-        http.request.uri = "/file/./../../file".to_string();
-        http.response.body_buffer.truncate(0);
-
-        conf.handle_request(&http.request, &mut http.response);
-
-        assert_eq!(http.response.status, 200);
-        assert_eq!(&http.response.body_buffer[..], b"hello");
+        test_handle_request(&conf, &mut http, "/file/./../../file", 200, b"hello");
 
         // Forbidden test
         let path = format!("{}noperm", TEST_PATH);
@@ -207,44 +236,20 @@ mod tests {
 
         fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
 
-        http.request.uri = "/noperm".to_string();
-        http.response.body_buffer.truncate(0);
-
-        conf.handle_request(&http.request, &mut http.response);
-
-        assert_eq!(http.response.status, 403);
-        assert_eq!(&http.response.body_buffer[..], b"");
+        test_handle_request(&conf, &mut http, "/noperm", 403, b"");
 
         // Notfound test
-        http.request.uri = "/notfound".to_string();
-        http.response.body_buffer.truncate(0);
-
-        conf.handle_request(&http.request, &mut http.response);
-
-        assert_eq!(http.response.status, 404);
-        assert_eq!(&http.response.body_buffer[..], b"");
+        test_handle_request(&conf, &mut http, "/notfound", 404, b"");
 
         // Uri config test
-        conf.uri = Some("/uri".to_string());
+        conf.config_path = Some("/uri".to_string());
 
-        http.request.uri = "/uri/file".to_string();
-        http.response.body_buffer.truncate(0);
-
-        conf.handle_request(&http.request, &mut http.response);
-
-        assert_eq!(http.response.status, 200);
-        assert_eq!(&http.response.body_buffer[..], b"hello");
+        test_handle_request(&conf, &mut http, "/uri/file", 200, b"hello");
 
         // File as path test
         conf.static_files_path = Some(PathKind::File(format!("{}file", TEST_PATH).into()));
-        conf.uri = None;
+        conf.config_path = None;
 
-        http.request.uri = "/blablabla".to_string();
-        http.response.body_buffer.truncate(0);
-
-        conf.handle_request(&http.request, &mut http.response);
-
-        assert_eq!(http.response.status, 200);
-        assert_eq!(&http.response.body_buffer[..], b"hello");
+        test_handle_request(&conf, &mut http, "/blablabla", 200, b"hello");
     }
 }

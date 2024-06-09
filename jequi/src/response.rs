@@ -47,7 +47,7 @@ mod tests {
     use http::HeaderMap;
     use tokio::io::{AsyncReadExt, BufStream};
 
-    use crate::{body::RequestBody, http1::Http1Conn, RawStream, Request, Response};
+    use crate::{body::RequestBody, http1::Http1Conn, RawStream, Request, Response, Uri};
 
     fn new_response(
         headers: HeaderMap,
@@ -61,7 +61,7 @@ mod tests {
             version,
             request: Request {
                 method: String::new(),
-                uri: String::new(),
+                uri: Uri::from(String::new()),
                 headers: HeaderMap::new(),
                 host: None,
                 body: Arc::new(RequestBody::default()),

@@ -67,7 +67,8 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
             compressed_headers,
         );
 
-        let config = config_map.get_config_for_request(request.host.as_deref(), Some(&request.uri));
+        let config =
+            config_map.get_config_for_request(request.host.as_deref(), Some(request.uri.path()));
         let conf = get_plugin!(config, jequi).unwrap();
 
         self.conn

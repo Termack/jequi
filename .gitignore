@@ -1,3 +1,4 @@
 target/
 *jequi.pid
 expanded.rs
+jequi_go.*

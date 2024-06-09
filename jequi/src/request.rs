@@ -6,13 +6,35 @@ use http::{HeaderMap, HeaderValue};
 
 use crate::body::GetBody;
 use crate::{body::RequestBody, Request};
-use crate::{ConfigMap, Response};
+use crate::{ConfigMap, Response, Uri};
+
+impl From<String> for Uri {
+    fn from(item: String) -> Self {
+        Self(item)
+    }
+}
+
+impl Uri {
+    pub fn raw(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn path(&self) -> &str {
+        self.0.splitn(2, '?').next().unwrap()
+    }
+
+    pub fn query_string(&self) -> Option<&str> {
+        let mut it = self.0.splitn(2, '?');
+        it.next();
+        it.next()
+    }
+}
 
 impl Request {
     pub fn new() -> Request {
         Request {
             method: String::new(),
-            uri: String::new(),
+            uri: Uri::from(String::new()),
             headers: HeaderMap::new(),
             host: None,
             body: Arc::new(RequestBody::default()),
@@ -45,7 +67,7 @@ impl Request {
             &Utc::now().format("%a, %e %b %Y %T GMT").to_string(),
         );
 
-        let config = config_map.get_config_for_request(self.host.as_deref(), Some(&self.uri));
+        let config = config_map.get_config_for_request(self.host.as_deref(), Some(self.uri.path()));
 
         for handle_plugin in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
             if let Some(fut) = handle_plugin(self, response) {

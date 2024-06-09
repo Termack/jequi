@@ -13,7 +13,7 @@ use tokio::{
     pin,
 };
 
-use crate::{body::RequestBody, RawStream, Request};
+use crate::{body::RequestBody, RawStream, Request, Uri};
 
 use super::Http1Conn;
 
@@ -37,7 +37,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
         self.read_until_handle_eof(b'\n', &mut version).await?;
 
         self.request.method = String::from_utf8_lossy(&method[..method.len() - 1]).to_string();
-        self.request.uri = String::from_utf8_lossy(uri.trim_ascii()).to_string();
+        self.request.uri = Uri::from(String::from_utf8_lossy(uri.trim_ascii()).to_string());
         self.version = String::from_utf8_lossy(version.trim_ascii()).to_string();
         Ok(())
     }

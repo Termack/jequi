@@ -5,8 +5,9 @@ use futures::future::{BoxFuture, FutureExt};
 use hyper::body::{self};
 use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
-use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
-use serde::Deserialize;
+use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response, Uri};
+use rand::seq::SliceRandom;
+use serde::{de, Deserialize};
 use serde_yaml::Value;
 use std::any::Any;
 use std::ffi::CStr;
@@ -27,7 +28,7 @@ pub unsafe extern "C" fn set_request_uri(req: *mut Request, value: *const c_char
     if !uri.starts_with('/') {
         uri.insert(0, '/');
     }
-    req.uri = uri;
+    req.uri = Uri::from(uri);
 }
 
 pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Option<Plugin> {
@@ -63,9 +64,16 @@ impl fmt::Debug for RequestProxyHandler {
     }
 }
 
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum ProxyAddress {
+    Address(String),
+    Addresses(Vec<String>),
+}
+
 #[derive(Deserialize, Default, Debug)]
 pub struct Config {
-    pub proxy_address: Option<String>,
+    pub proxy_address: Option<ProxyAddress>,
     #[serde(skip)]
     proxy_handlers: Option<Vec<RequestProxyHandler>>,
 }
@@ -101,22 +109,36 @@ impl Config {
             }
         }
 
-        let mut proxy_address = &proxy_address;
+        let mut proxy_address = proxy_address.as_ref();
         if proxy_address.is_none() {
-            proxy_address = &self.proxy_address;
+            proxy_address = self.proxy_address.as_ref().map(|a| match a {
+                ProxyAddress::Address(address) => address,
+                ProxyAddress::Addresses(addresses) => {
+                    addresses.choose(&mut rand::thread_rng()).unwrap()
+                }
+            })
         }
 
+        let (address, scheme) = {
+            let proxy_address = proxy_address.unwrap();
+
+            let mut it = proxy_address.splitn(2, "://");
+
+            let first = it.next().unwrap();
+            match it.next() {
+                Some(address) => (address, first),
+                None => (first, "https"),
+            }
+        };
+
         let url = http::Uri::builder()
-            .scheme("https")
-            .authority(proxy_address.as_ref().unwrap().deref())
-            .path_and_query(req.uri.deref())
+            .scheme(scheme)
+            .authority(address)
+            .path_and_query(req.uri.path())
             .build()
             .unwrap();
         let mut request_builder = http::Request::builder().method(req.method.deref()).uri(url);
-        req.headers.insert(
-            "Host",
-            proxy_address.as_ref().unwrap().deref().parse().unwrap(),
-        );
+        req.headers.insert("Host", address.parse().unwrap());
         *request_builder.headers_mut().unwrap() = req.headers.clone();
         let bodyy = req.get_body().await.clone();
         let body = match bodyy.as_deref() {

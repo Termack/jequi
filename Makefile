@@ -9,12 +9,12 @@ clear:
 
 go_setup:
 	if ! [ -f /etc/jequi/libjequi.so ]; then \
-		sudo cp target/debug/libjequi.so /etc/jequi/libjequi.so; \
+		sudo cp $(PWD)/target/debug/libjequi.so /etc/jequi/libjequi.so; \
 	fi \
 	&& cd ./plugins/jequi_go/go/jequi \
-	&& go generate \
 	&& go mod edit -replace github.com/handle=$(HANDLER_PATH) \
-	&& go mod tidy
+	&& go mod tidy \
+	&& go generate
 
 go: clear go_setup
 	cd ./plugins/jequi_go/go/jequi && LIB_DIR=$(LIB_DIR) go build -o $(LIB_DIR)/$(LIB_NAME).so -buildmode=c-shared

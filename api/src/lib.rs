@@ -60,7 +60,7 @@ pub unsafe extern "C" fn get_request_body(req: *mut Request) -> *const c_char {
 #[no_mangle]
 pub unsafe extern "C" fn get_request_uri(req: *mut Request) -> *const c_char {
     let req: &mut Request = unsafe { get_object_from_pointer(req) };
-    CString::new(req.uri.as_str()).unwrap().into_raw()
+    CString::new(req.uri.raw()).unwrap().into_raw()
 }
 
 #[no_mangle]

@@ -11,7 +11,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{ConfigMap, Request, Response};
+use crate::{ConfigMap, Request, Response, Uri};
 
 use super::{Stream, END_STREAM_FLAG, PADDED_FLAG, PRIORITY_FLAG};
 
@@ -193,7 +193,9 @@ impl<P: AsRef<[u8]>> Http2Frame<P> {
                         b":method" => {
                             request.method = String::from_utf8_lossy(v.as_ref()).to_string()
                         }
-                        b":path" => request.uri = String::from_utf8_lossy(v.as_ref()).to_string(),
+                        b":path" => {
+                            request.uri = Uri::from(String::from_utf8_lossy(v.as_ref()).to_string())
+                        }
                         b":authority" => {
                             request.host = Some(String::from_utf8_lossy(v.as_ref()).to_string())
                         }

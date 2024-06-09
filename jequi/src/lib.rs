@@ -17,6 +17,7 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::{self, Debug},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -58,20 +59,20 @@ pub type ConfigList = Vec<Plugin>;
 
 #[derive(Debug)]
 pub struct HostConfig {
-    pub uri: Option<HashMap<String, ConfigList>>,
+    pub path: Option<HashMap<PathBuf, ConfigList>>,
     pub config: ConfigList,
 }
 
 #[derive(Default, Debug)]
 pub struct ConfigMap {
     pub host: Option<HashMap<String, HostConfig>>,
-    pub uri: Option<HashMap<String, ConfigList>>,
+    pub path: Option<HashMap<PathBuf, ConfigList>>,
     pub config: ConfigList,
 }
 
 #[derive(Deserialize)]
 pub struct HostConfigParser {
-    pub uri: Option<HashMap<String, Value>>,
+    pub path: Option<HashMap<PathBuf, Value>>,
     #[serde(flatten)]
     pub config: Value,
 }
@@ -79,7 +80,7 @@ pub struct HostConfigParser {
 #[derive(Deserialize)]
 pub struct ConfigMapParser {
     pub host: Option<HashMap<String, HostConfigParser>>,
-    pub uri: Option<HashMap<String, Value>>,
+    pub path: Option<HashMap<PathBuf, Value>>,
     #[serde(flatten)]
     pub config: Value,
 }
@@ -117,9 +118,11 @@ pub enum RawStream<T: AsyncRead + AsyncWrite + Unpin + Send> {
     Normal(T),
 }
 
+pub struct Uri(String);
+
 pub struct Request {
     pub method: String,
-    pub uri: String,
+    pub uri: Uri,
     pub headers: HeaderMap,
     pub host: Option<String>,
     pub body: Arc<RequestBody>,

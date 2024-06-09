@@ -1,22 +1,22 @@
 tls_active: true
-proxy_address: "www.google.com"
 ssl_certificate: jequi/test/leaf-cert.pem
 ssl_key: jequi/test/leaf-cert.key
-go_library_path: "jequi_go.so"
+static_files_path: "test/"
+go_library_path: "./jequi_go.so"
 host:
   jequi.com:
     ssl_certificate: jequi/test/leaf-cert.pem
     ssl_key: jequi/test/leaf-cert.key
     http2: true
     chunk_size: 4000
-    uri:
-      /api:
-        go_library_path: "jequi_go.so"
-      /app:
-        static_files_path: "test/host/uri/"
-    go_library_path: "jequi_go.so"
-    proxy_address: "www.google.com"
+    path:
+      /api/:
+        go_library_path: "./jequi_go.so"
+      /app/:
+        static_files_path: "test/host/path/"
+    go_library_path: "./jequi_go.so"
+    proxy_address: ["www.google.com","https://github.com"]
     # static_files_path: "test/"
-uri:
-  /api/v2:
-    go_library_path: "jequi_go.so"
+path:
+  /api/v2/:
+    go_library_path: "./jequi_go.so"

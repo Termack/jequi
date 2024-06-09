@@ -121,7 +121,7 @@ mod tests {
 
     use std::{io::Cursor, process::Command};
 
-    use jequi::{http1::Http1Conn, JequiConfig, RawStream};
+    use jequi::{http1::Http1Conn, JequiConfig, RawStream, Uri};
     use serde_yaml::{Mapping, Value};
 
     use crate::Config;
@@ -155,12 +155,15 @@ mod tests {
 
         let conf = Config::load(&Value::Mapping(yaml_config), &mut Vec::new()).unwrap();
 
-        http.request.uri = "/file".to_string();
+        http.request.uri = Uri::from("/file".to_string());
 
         conf.handle_request(&mut http.request, &mut http.response);
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");
-        assert_eq!(http.response.get_header("test").unwrap(), &http.request.uri);
+        assert_eq!(
+            http.response.get_header("test").unwrap(),
+            &http.request.uri.raw()
+        );
     }
 }

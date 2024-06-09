@@ -58,7 +58,7 @@ async fn parse_first_line_test() {
 
         assert_eq!(
             expected_results[i],
-            new_result(req.request.method, req.request.uri, req.version,),
+            new_result(req.request.method, req.request.uri.0, req.version,),
             "Testing parse for line: {}",
             String::from_utf8_lossy(r)
         )

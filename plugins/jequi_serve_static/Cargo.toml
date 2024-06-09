@@ -10,3 +10,5 @@ jequi = { path = "../../jequi" }
 serde = {version = "1.0.183",features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 serde_yaml = "0.9.25"
+http = "0.2.9"
+derivative = "2.2.0"
