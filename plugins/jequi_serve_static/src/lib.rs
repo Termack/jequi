@@ -85,6 +85,7 @@ pub struct Config {
     pub static_files_path: Option<PathKind>,
     #[derivative(Default(value = "true"))]
     pub infer_content_type: bool,
+    pub not_found_file_path: Option<PathBuf>,
     config_path: Option<String>,
 }
 
@@ -126,6 +127,11 @@ impl Config {
             }
             Err(_) => {
                 resp.status = 404;
+                if let Some(not_found_path) = self.not_found_file_path.as_ref() {
+                    if let Ok(content) = std::fs::read(not_found_path) {
+                        resp.write_body(&content).unwrap();
+                    }
+                }
                 return;
             }
         };
@@ -209,6 +215,7 @@ mod tests {
 
         let mut conf = Config {
             static_files_path: Some(PathKind::Dir(TEST_PATH.into())),
+            not_found_file_path: Some(format!("{}notfound.html", TEST_PATH).into()),
             ..Default::default()
         };
 
@@ -239,7 +246,7 @@ mod tests {
         test_handle_request(&conf, &mut http, "/noperm", 403, b"");
 
         // Notfound test
-        test_handle_request(&conf, &mut http, "/notfound", 404, b"");
+        test_handle_request(&conf, &mut http, "/notfound", 404, b"not found\n");
 
         // Uri config test
         conf.config_path = Some("/uri".to_string());

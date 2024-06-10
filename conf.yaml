@@ -2,6 +2,7 @@ tls_active: true
 ssl_certificate: jequi/test/leaf-cert.pem
 ssl_key: jequi/test/leaf-cert.key
 static_files_path: "test/"
+not_found_file_path: test/notfound
 go_library_path: "./jequi_go.so"
 host:
   jequi.com:

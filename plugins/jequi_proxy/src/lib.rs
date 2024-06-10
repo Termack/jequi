@@ -149,6 +149,7 @@ impl Config {
         let client = Client::builder().build::<_, Body>(https);
         let request = request_builder.body(body).unwrap();
         let response = client.request(request).await.unwrap();
+        resp.status = response.status().as_u16() as usize;
         resp.headers = response.headers().clone();
         resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
             .unwrap();
