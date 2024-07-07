@@ -50,7 +50,7 @@ async fn parse_first_line_test() {
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(Cursor::new(r.clone()));
 
         let err = req.parse_first_line().await;
 
@@ -132,7 +132,7 @@ hello world"
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(Cursor::new(r.clone()));
 
         req.parse_first_line().await.unwrap();
 
@@ -206,7 +206,7 @@ r
     ];
 
     for (i, r) in requests_in.iter().enumerate() {
-        let mut req = Http1Conn::new(RawStream::Normal(Cursor::new(r.clone())));
+        let mut req = Http1Conn::new(Cursor::new(r.clone()));
 
         req.parse_first_line().await.unwrap();
 

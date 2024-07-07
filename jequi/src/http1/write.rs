@@ -2,9 +2,11 @@ use http::header;
 use std::io::Result;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
+use crate::AsyncRWSend;
+
 use super::Http1Conn;
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
+impl<'a, T: AsyncRWSend> Http1Conn<T> {
     pub async fn write_response(&mut self, chunk_size: usize) -> Result<()> {
         let mut headers = String::new();
         let status_line = format!("{} {}\n", self.version, self.response.status);

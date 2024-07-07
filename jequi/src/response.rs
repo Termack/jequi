@@ -57,7 +57,7 @@ mod tests {
     ) -> Http1Conn<Cursor<Vec<u8>>> {
         let stream: Vec<u8> = Vec::new();
         Http1Conn {
-            conn: BufStream::new(RawStream::Normal(Cursor::new(stream))),
+            conn: Cursor::new(stream),
             version,
             request: Request {
                 method: String::new(),
@@ -159,9 +159,7 @@ aaaaa
 
             let mut buf = Vec::new();
 
-            if let RawStream::Normal(stream) = r.conn.get_mut() {
-                stream.set_position(0)
-            }
+            r.conn.set_position(0);
 
             let n = r.conn.read_to_end(&mut buf).await.unwrap();
 

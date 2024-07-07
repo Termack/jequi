@@ -487,7 +487,6 @@ dependencies = [
  "tokio",
  "tokio-openssl",
  "tokio-scoped",
- "trait-set",
 ]
 
 [[package]]
@@ -526,6 +525,7 @@ name = "jequi_serve_static"
 version = "0.1.0"
 dependencies = [
  "derivative",
+ "futures",
  "http",
  "jequi",
  "serde",

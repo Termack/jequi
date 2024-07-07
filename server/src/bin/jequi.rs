@@ -1,9 +1,10 @@
 #![feature(let_chains)]
 use jequi::tcp_stream::new_http_conn;
-use jequi::{Config, ConfigMap};
+use jequi::{Config, ConfigMap, HttpConn};
 use plugins::load_plugins;
 use std::process;
 use std::{fs, sync::Arc};
+use tokio::io::BufStream;
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},
@@ -14,7 +15,7 @@ use tokio::{
 load_plugins!();
 
 async fn handle_connection(stream: TcpStream, config_map: Arc<ConfigMap>) {
-    let mut http = new_http_conn(stream, config_map.clone()).await;
+    let http = HttpConn::new(stream, config_map.clone()).await;
     http.handle_connection(config_map).await;
 }
 

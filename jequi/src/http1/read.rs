@@ -13,11 +13,11 @@ use tokio::{
     pin,
 };
 
-use crate::{body::RequestBody, RawStream, Request, Uri};
+use crate::{body::RequestBody, AsyncRWSend, RawStream, Request, Uri};
 
 use super::Http1Conn;
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
+impl<T: AsyncRWSend> Http1Conn<T> {
     async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
         let n = self.conn.read_until(byte, buf).await?;
         if n == 0 {
@@ -76,10 +76,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
         }
     }
 
-    pub fn read_body<'b>(
-        conn: &'b mut BufStream<RawStream<T>>,
-        request: &Request,
-    ) -> ReadBody<'b, T> {
+    pub fn read_body<'b>(conn: &'b mut T, request: &Request) -> ReadBody<'b, T> {
         ReadBody {
             content_length: request.get_content_length(),
             conn,
@@ -88,15 +85,15 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
     }
 }
 
-pub struct ReadBody<'a, T: AsyncRead + AsyncWrite + Unpin + Send> {
+pub struct ReadBody<'a, T: AsyncRWSend> {
     content_length: Result<usize>,
-    conn: &'a mut BufStream<RawStream<T>>,
+    conn: &'a mut T,
     body: Arc<RequestBody>,
 }
 
-unsafe impl<T: AsyncRead + AsyncWrite + Unpin + Send> Send for ReadBody<'_, T> {}
+unsafe impl<T: AsyncRWSend> Send for ReadBody<'_, T> {}
 
-impl<'a, T: AsyncRead + AsyncWrite + Unpin + Send> Future for ReadBody<'a, T> {
+impl<'a, T: AsyncRWSend> Future for ReadBody<'a, T> {
     type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

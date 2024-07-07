@@ -14,13 +14,9 @@ use openssl::x509::X509;
 
 use tokio_openssl::SslStream;
 
-use crate::{ConfigMap, RawStream};
+use crate::{AsyncRWSend, ConfigMap, RawStream};
 
 use crate as jequi;
-
-static INTERMEDIATE_CERT: &[u8] = include_bytes!("../test/intermediate.pem");
-static LEAF_CERT: &[u8] = include_bytes!("../test/leaf-cert.pem");
-static LEAF_KEY: &[u8] = include_bytes!("../test/leaf-cert.key");
 
 #[derive(Clone, Debug)]
 pub struct SslKeyConfig(PKey<Private>);
@@ -116,10 +112,10 @@ impl<'de> Deserialize<'de> for SslCertConfig {
     }
 }
 
-pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
+pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     stream: T,
     config_map: Arc<ConfigMap>,
-) -> (RawStream<T>, String) {
+) -> (SslStream<T>, String) {
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     acceptor.set_servername_callback(
         move |ssl_ref: &mut SslRef, _ssl_alert: &mut SslAlert| -> Result<(), SniError> {
@@ -175,7 +171,7 @@ pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send>(
         None => String::new(),
     };
 
-    (RawStream::Ssl(stream), version)
+    (stream, version)
 }
 
 #[cfg(test)]
@@ -228,14 +224,9 @@ mod tests {
                 request_handler: RequestHandler(None),
             });
 
-            let (stream, _) = super::ssl_new(stream, Arc::new(main_conf)).await;
-            let req = Http1Conn::new(stream);
+            let (mut stream, _) = super::ssl_new(stream, Arc::new(main_conf)).await;
 
-            if let RawStream::Ssl(mut stream) = req.conn.into_inner() {
-                stream.write_all(b"hello").await.unwrap()
-            } else {
-                panic!("Stream is not ssl")
-            }
+            stream.write_all(b"hello").await.unwrap();
         });
 
         let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();

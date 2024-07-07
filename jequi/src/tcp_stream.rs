@@ -5,15 +5,16 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream, ReadBuf};
 
 use crate::{
-    http1::Http1Conn, http2::conn::Http2Conn, ssl::ssl_new, ConfigMap, HttpConn, RawStream,
+    http1::Http1Conn, http2::conn::Http2Conn, ssl::ssl_new, AsyncRWSend, ConfigMap, HttpConn,
+    RawStream,
 };
 
 use crate as jequi;
 
-impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for RawStream<S> {
+impl<S: AsyncRWSend> AsyncRead for RawStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -26,7 +27,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncRead for RawStream<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for RawStream<S> {
+impl<S: AsyncRWSend> AsyncBufRead for RawStream<S> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
+        todo!()
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        todo!()
+    }
+}
+
+impl<S: AsyncRWSend> AsyncWrite for RawStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -71,7 +82,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> AsyncWrite for RawStream<S> {
     }
 }
 
-pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send>(
+pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     stream: T,
     config_map: Arc<ConfigMap>,
 ) -> HttpConn<T> {
@@ -83,7 +94,7 @@ pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send>(
         if version == "h2" {
             return HttpConn::HTTP2(Http2Conn::new(stream));
         }
-        return HttpConn::HTTP1(Http1Conn::new(stream));
+        return HttpConn::HTTP1Ssl(Http1Conn::new(stream));
     }
-    HttpConn::HTTP1(Http1Conn::new(RawStream::Normal(stream)))
+    HttpConn::HTTP1(Http1Conn::new(stream))
 }

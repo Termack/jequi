@@ -18,7 +18,6 @@ futures = "0.3.29"
 tokio = { version = "1", features = ["full"] }
 tokio-scoped = "0.2.0"
 tokio-openssl = "0.6.4"
-trait-set = "0.3.0"
 http = "0.2.9"
 byteorder = "1.5.0"
 hpack-patched = "0.3.0"

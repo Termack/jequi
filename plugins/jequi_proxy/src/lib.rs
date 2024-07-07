@@ -3,9 +3,10 @@
 #![feature(closure_lifetime_binder)]
 use futures::future::{BoxFuture, FutureExt};
 use hyper::body::{self};
+use hyper::client::conn;
 use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
-use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response, Uri};
+use jequi::{JequiConfig, Plugin, PostRequestHandler, Request, RequestHandler, Response, Uri};
 use rand::seq::SliceRandom;
 use serde::{de, Deserialize};
 use serde_yaml::Value;
@@ -37,7 +38,7 @@ pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Op
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(move |req, resp| {
             let config = config.clone(); //TODO: figure out some way to avoid this clone
-            Some(async move { config.handle_request(req, resp).await }.boxed())
+            config.handle_request(req, resp).boxed()
         }))),
     })
 }
@@ -93,7 +94,11 @@ impl Config {
         self.proxy_handlers.as_mut().unwrap().push(handler);
     }
 
-    async fn handle_request(&self, req: &mut Request, resp: &mut Response) {
+    async fn handle_request(
+        self: Arc<Self>,
+        req: &mut Request,
+        resp: &mut Response,
+    ) -> PostRequestHandler {
         let mut proxy_address = None;
         for handle_request in self
             .proxy_handlers
@@ -146,6 +151,7 @@ impl Config {
             Some(buf) => Body::from(buf.to_owned()),
         };
         let https = HttpsConnector::new();
+        // let (mut request_sender, connection) = conn::http1::handshake(tcp).await?;
         let client = Client::builder().build::<_, Body>(https);
         let request = request_builder.body(body).unwrap();
         let response = client.request(request).await.unwrap();
@@ -153,6 +159,10 @@ impl Config {
         resp.headers = response.headers().clone();
         resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
             .unwrap();
+        PostRequestHandler::Continue
+        // PostRequestHandler::HijackConnection(Box::new(
+        //     |_conn: Http1Conn<Box<dyn DynAsyncRWSend>>| {},
+        // ))
     }
 }
 

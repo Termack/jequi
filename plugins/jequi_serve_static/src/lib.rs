@@ -1,6 +1,7 @@
 mod content_type;
 use derivative::Derivative;
-use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
+use futures::future::FutureExt;
+use jequi::{JequiConfig, Plugin, PostRequestHandler, Request, RequestHandler, Response};
 use serde::{de, Deserialize};
 use serde_yaml::Value;
 
@@ -18,8 +19,8 @@ pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Op
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(
             move |req: &mut Request, resp: &mut Response| {
-                config.handle_request(req, resp);
-                None
+                let config = config.clone(); //TODO: figure out some way to avoid this clone
+                config.handle_request(req, resp).boxed()
             },
         ))),
     })
@@ -90,7 +91,11 @@ pub struct Config {
 }
 
 impl Config {
-    fn handle_request(&self, req: &Request, resp: &mut Response) {
+    async fn handle_request(
+        self: Arc<Self>,
+        req: &Request,
+        resp: &mut Response,
+    ) -> PostRequestHandler {
         let final_path = &mut PathBuf::new();
         match self.static_files_path.as_ref().unwrap() {
             PathKind::File(file_path) => final_path.push(file_path),
@@ -123,7 +128,7 @@ impl Config {
             Ok(content) => resp.write_body(&content).unwrap(),
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 resp.status = 403;
-                return;
+                return PostRequestHandler::Exit;
             }
             Err(_) => {
                 resp.status = 404;
@@ -132,7 +137,7 @@ impl Config {
                         resp.write_body(&content).unwrap();
                     }
                 }
-                return;
+                return PostRequestHandler::Exit;
             }
         };
 
@@ -143,6 +148,7 @@ impl Config {
                 resp.set_header("Content-Type", content_type);
             }
         }
+        PostRequestHandler::Continue
     }
 }
 
@@ -176,16 +182,17 @@ mod tests {
         io::Cursor,
         os::unix::prelude::PermissionsExt,
         path::Path,
+        sync::Arc,
     };
 
     use http::HeaderValue;
-    use jequi::{http1::Http1Conn, RawStream, Uri};
+    use jequi::{http1::Http1Conn, AsyncRWSend, RawStream, Uri};
     use tokio::io::{AsyncRead, AsyncWrite};
 
     use crate::{Config, PathKind};
 
-    fn test_handle_request<T: AsyncRead + AsyncWrite + Unpin + Send>(
-        conf: &Config,
+    async fn test_handle_request<T: AsyncRWSend>(
+        conf: Arc<Config>,
         http: &mut Http1Conn<T>,
         uri: &str,
         expected_status: usize,
@@ -194,7 +201,7 @@ mod tests {
         http.request.uri = Uri::from(uri.to_string());
         http.response.body_buffer.truncate(0);
 
-        conf.handle_request(&http.request, &mut http.response);
+        conf.handle_request(&http.request, &mut http.response).await;
 
         assert_eq!(
             http.response.status, expected_status,
@@ -213,17 +220,24 @@ mod tests {
     async fn handle_static_files_test() {
         let mut http = Http1Conn::new(RawStream::Normal(Cursor::new(vec![])));
 
-        let mut conf = Config {
+        let conf = &mut Arc::new(Config {
             static_files_path: Some(PathKind::Dir(TEST_PATH.into())),
             not_found_file_path: Some(format!("{}notfound.html", TEST_PATH).into()),
             ..Default::default()
-        };
+        });
 
         // Normal test
-        test_handle_request(&conf, &mut http, "/file", 200, b"hello");
+        test_handle_request(conf.clone(), &mut http, "/file", 200, b"hello").await;
 
         // Content type test
-        test_handle_request(&conf, &mut http, "/aa.js", 200, b"console.log(\"a\")\n");
+        test_handle_request(
+            conf.clone(),
+            &mut http,
+            "/aa.js",
+            200,
+            b"console.log(\"a\")\n",
+        )
+        .await;
 
         assert_eq!(
             http.response.get_header("Content-Type"),
@@ -231,7 +245,7 @@ mod tests {
         );
 
         // lfi test
-        test_handle_request(&conf, &mut http, "/file/./../../file", 200, b"hello");
+        test_handle_request(conf.clone(), &mut http, "/file/./../../file", 200, b"hello").await;
 
         // Forbidden test
         let path = format!("{}noperm", TEST_PATH);
@@ -243,20 +257,21 @@ mod tests {
 
         fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
 
-        test_handle_request(&conf, &mut http, "/noperm", 403, b"");
+        test_handle_request(conf.clone(), &mut http, "/noperm", 403, b"").await;
 
         // Notfound test
-        test_handle_request(&conf, &mut http, "/notfound", 404, b"not found\n");
+        test_handle_request(conf.clone(), &mut http, "/notfound", 404, b"not found\n").await;
 
         // Uri config test
-        conf.config_path = Some("/uri".to_string());
+        Arc::get_mut(conf).unwrap().config_path = Some("/uri".to_string());
 
-        test_handle_request(&conf, &mut http, "/uri/file", 200, b"hello");
+        test_handle_request(conf.clone(), &mut http, "/uri/file", 200, b"hello").await;
 
         // File as path test
-        conf.static_files_path = Some(PathKind::File(format!("{}file", TEST_PATH).into()));
-        conf.config_path = None;
+        Arc::get_mut(conf).unwrap().static_files_path =
+            Some(PathKind::File(format!("{}file", TEST_PATH).into()));
+        Arc::get_mut(conf).unwrap().config_path = None;
 
-        test_handle_request(&conf, &mut http, "/blablabla", 200, b"hello");
+        test_handle_request(conf.clone(), &mut http, "/blablabla", 200, b"hello").await;
     }
 }

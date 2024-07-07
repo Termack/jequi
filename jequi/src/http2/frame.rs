@@ -11,7 +11,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{ConfigMap, Request, Response, Uri};
+use crate::{AsyncRWSend, ConfigMap, Request, Response, Uri};
 
 use super::{Stream, END_STREAM_FLAG, PADDED_FLAG, PRIORITY_FLAG};
 
@@ -30,7 +30,7 @@ pub enum FrameType {
 }
 
 impl From<&FrameType> for u8 {
-    fn from(val: &FrameType) -> Self {
+    fn from(val: &FrameType) -> u8 {
         match val {
             FrameType::Data => 0,
             FrameType::Headers => 1,
@@ -78,21 +78,19 @@ where
     payload: P,
 }
 
-pub struct BufStreamRaw<T: AsyncRead + AsyncWrite + Unpin + Send>(pub *mut BufStream<T>);
+pub struct BufStreamRaw<T: AsyncRWSend>(pub *mut T);
 
-unsafe impl<T: AsyncRead + AsyncWrite + Unpin + Send> Send for BufStreamRaw<T> {}
-unsafe impl<T: AsyncRead + AsyncWrite + Unpin + Send> Sync for BufStreamRaw<T> {}
+unsafe impl<T: AsyncRWSend> Send for BufStreamRaw<T> {}
+unsafe impl<T: AsyncRWSend> Sync for BufStreamRaw<T> {}
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> BufStreamRaw<T> {
-    pub fn get_mut(&mut self) -> &mut BufStream<T> {
+impl<T: AsyncRWSend> BufStreamRaw<T> {
+    pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.0 }
     }
 }
 
 impl Http2Frame<Vec<u8>> {
-    pub async fn read_frame<T: AsyncRead + AsyncWrite + Unpin + Send>(
-        mut stream: BufStreamRaw<T>,
-    ) -> Http2Frame<Vec<u8>> {
+    pub async fn read_frame<T: AsyncRWSend>(mut stream: BufStreamRaw<T>) -> Http2Frame<Vec<u8>> {
         let stream = stream.get_mut();
         let mut buf = vec![0; 9];
         stream.read_exact(&mut buf).await.unwrap();

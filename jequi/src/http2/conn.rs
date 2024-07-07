@@ -13,26 +13,28 @@ use crate::{
         frame::{BufStreamRaw, FrameType},
         END_HEADERS_FLAG, PREFACE,
     },
-    ConfigMap, RawStream,
+    AsyncRWSend, ConfigMap, RawStream,
 };
 
 use crate as jequi;
 
 use super::{frame::Http2Frame, Stream, END_STREAM_FLAG};
 
-pub struct Http2Conn<T: AsyncRead + AsyncWrite + Unpin + Send> {
-    pub conn: BufStream<RawStream<T>>,
+pub struct Http2Conn<T: AsyncRWSend> {
+    pub conn: T,
     streams: HashMap<u32, Arc<Stream>>,
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
-    pub fn new(stream: RawStream<T>) -> Http2Conn<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> Http2Conn<BufStream<T>> {
+    pub fn new(stream: T) -> Http2Conn<BufStream<T>> {
         Http2Conn {
             conn: BufStream::new(stream),
             streams: HashMap::new(),
         }
     }
+}
 
+impl<T: AsyncRWSend> Http2Conn<T> {
     async fn write_response(
         &mut self,
         stream_id: Option<u32>,
@@ -100,7 +102,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http2Conn<T> {
         }
     }
 
-    pub async fn handle_connection(&mut self, config_map: Arc<ConfigMap>) {
+    pub async fn handle_connection(mut self, config_map: Arc<ConfigMap>) {
         let mut buf = vec![0; 24];
         self.conn.read_exact(&mut buf).await.unwrap();
         if buf != PREFACE {

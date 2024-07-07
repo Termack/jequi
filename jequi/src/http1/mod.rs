@@ -2,10 +2,10 @@
 mod read;
 mod write;
 use std::{io::ErrorKind, sync::Arc};
-use tokio::io::BufStream;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 
-use crate::{ConfigMap, RawStream, Request, Response};
+use crate::hijack::DynAsyncRWSend;
+use crate::{AsyncRWSend, ConfigMap, PostRequestHandler, RawStream, Request, Response};
 
 use plugins::get_plugin;
 
@@ -13,15 +13,15 @@ use crate::Config;
 
 use crate as jequi;
 
-pub struct Http1Conn<T: AsyncRead + AsyncWrite + Unpin + Send> {
-    pub conn: BufStream<RawStream<T>>,
+pub struct Http1Conn<T: AsyncRWSend> {
+    pub conn: T,
     pub version: String,
     pub request: Request,
     pub response: Response,
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
-    pub fn new(stream: RawStream<T>) -> Http1Conn<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> Http1Conn<BufStream<T>> {
+    pub fn new(stream: T) -> Http1Conn<BufStream<T>> {
         Http1Conn {
             conn: BufStream::new(stream),
             version: String::new(),
@@ -29,11 +29,27 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
             response: Response::new(),
         }
     }
-    pub async fn handle_connection(&mut self, config_map: Arc<ConfigMap>) {
+}
+
+impl<T: AsyncRWSend> Http1Conn<T> {
+    pub fn as_dyn(self) -> Http1Conn<Box<dyn DynAsyncRWSend>> {
+        Http1Conn {
+            conn: Box::new(self.conn),
+            version: self.version,
+            request: self.request,
+            response: self.response,
+        }
+    }
+
+    pub async fn handle_connection(mut self, config_map: Arc<ConfigMap>) {
         let plugin_list = &config_map.config;
         let conf = get_plugin!(plugin_list, jequi).unwrap();
 
-        self.handle_request(conf, config_map.clone()).await;
+        let post_handler = self.handle_request(conf, config_map.clone()).await;
+        if let PostRequestHandler::HijackConnection(hijack_connection) = post_handler {
+            hijack_connection(self.as_dyn());
+            return;
+        }
         if let Some(connection) = self.request.headers.get("connection")
             && connection.to_str().unwrap().to_lowercase() == "keep-alive"
         {
@@ -45,7 +61,11 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
         }
     }
 
-    async fn handle_request(&mut self, conf: &Config, config_map: Arc<ConfigMap>) {
+    async fn handle_request(
+        &mut self,
+        conf: &Config,
+        config_map: Arc<ConfigMap>,
+    ) -> PostRequestHandler {
         self.parse_first_line().await.unwrap();
 
         self.parse_headers().await.unwrap();
@@ -54,6 +74,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
         let read_body = Http1Conn::read_body(&mut self.conn, &self.request);
 
         let request = &mut self.request;
+        let mut post_handler = PostRequestHandler::Continue;
         tokio_scoped::scope(|scope| {
             scope.spawn(async move {
                 match read_body.await {
@@ -64,11 +85,13 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> Http1Conn<T> {
             });
 
             scope.spawn(async {
-                request.handle_request(&mut self.response, config_map).await;
+                post_handler = request.handle_request(&mut self.response, config_map).await;
             });
         });
 
         self.write_response(conf.chunk_size).await.unwrap();
+
+        post_handler
     }
 }
 

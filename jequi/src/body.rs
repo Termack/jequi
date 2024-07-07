@@ -48,7 +48,7 @@ impl<'a> RequestBody {
     pub fn write_body(&mut self, bytes: Option<Vec<u8>>) {
         self.bytes = Arc::new(bytes);
         self.is_written.store(true, Relaxed);
-        for waker in &self.waker {
+        if let Some(waker) = &self.waker {
             waker.wake_by_ref();
         }
     }

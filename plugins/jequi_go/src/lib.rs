@@ -1,6 +1,6 @@
 #![feature(get_mut_unchecked)]
 use futures::future::FutureExt;
-use jequi::{JequiConfig, Plugin, Request, RequestHandler, Response};
+use jequi::{JequiConfig, Plugin, PostRequestHandler, Request, RequestHandler, Response};
 use jequi_proxy::RequestProxyHandler;
 use libloading::Library;
 use plugins::get_plugin;
@@ -17,8 +17,8 @@ pub fn load_plugin(config_yaml: &Value, configs: &mut Vec<Option<Plugin>>) -> Op
         config: config.clone(),
         request_handler: RequestHandler(Some(Arc::new(
             move |req: &mut Request, resp: &mut Response| {
-                config.handle_request(req, resp);
-                None
+                let config = config.clone(); //TODO: figure out some way to avoid this clone
+                config.handle_request(req, resp).boxed()
             },
         ))),
     })
@@ -41,14 +41,11 @@ pub struct Config {
 }
 
 impl Config {
-    pub const fn new() -> Self {
-        Config {
-            go_library_path: None,
-            lib: Lib(None),
-        }
-    }
-
-    pub fn handle_request(&self, req: &mut Request, resp: &mut Response) {
+    async fn handle_request(
+        self: Arc<Self>,
+        req: &mut Request,
+        resp: &mut Response,
+    ) -> PostRequestHandler {
         let lib = self.lib.0.as_ref().unwrap();
         unsafe {
             let go_handle_request: libloading::Symbol<
@@ -56,9 +53,10 @@ impl Config {
             > = lib.get(b"HandleRequest\0").unwrap();
             go_handle_request(req, resp);
         }
+        PostRequestHandler::Continue
     }
 
-    pub fn handle_request_proxy(&self, req: &mut Request, resp: &mut Response) -> Option<String> {
+    fn handle_request_proxy(&self, req: &mut Request, resp: &mut Response) -> Option<String> {
         let lib = self.lib.0.as_ref().unwrap();
         unsafe {
             let go_handle_proxy_request: libloading::Symbol<
@@ -157,7 +155,8 @@ mod tests {
 
         http.request.uri = Uri::from("/file".to_string());
 
-        conf.handle_request(&mut http.request, &mut http.response);
+        conf.handle_request(&mut http.request, &mut http.response)
+            .await;
 
         assert_eq!(http.response.status, 200);
         assert_eq!(&http.response.body_buffer[..], b"hello");

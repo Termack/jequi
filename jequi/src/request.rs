@@ -6,7 +6,7 @@ use http::{HeaderMap, HeaderValue};
 
 use crate::body::GetBody;
 use crate::{body::RequestBody, Request};
-use crate::{ConfigMap, Response, Uri};
+use crate::{ConfigMap, PostRequestHandler, Response, Uri};
 
 impl From<String> for Uri {
     fn from(item: String) -> Self {
@@ -60,7 +60,11 @@ impl Request {
             })
     }
 
-    pub async fn handle_request(&mut self, response: &mut Response, config_map: Arc<ConfigMap>) {
+    pub async fn handle_request(
+        &mut self,
+        response: &mut Response,
+        config_map: Arc<ConfigMap>,
+    ) -> PostRequestHandler {
         response.set_header("server", "jequi");
         response.set_header(
             "date",
@@ -70,14 +74,17 @@ impl Request {
         let config = config_map.get_config_for_request(self.host.as_deref(), Some(self.uri.path()));
 
         for handle_plugin in config.iter().map(|x| &x.request_handler.0).flat_map(|x| x) {
-            if let Some(fut) = handle_plugin(self, response) {
-                fut.await
+            match handle_plugin(self, response).await {
+                PostRequestHandler::Continue => (),
+                post_handler => return post_handler,
             }
         }
 
         if response.status == 0 {
             response.status = 200;
         }
+
+        PostRequestHandler::Continue
     }
 
     pub fn get_header(&self, header: &str) -> Option<&HeaderValue> {
