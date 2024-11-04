@@ -2,3 +2,4 @@ target/
 *jequi.pid
 expanded.rs
 jequi_go.*
+**/plugins.txt

@@ -15,5 +15,6 @@ futures = "0.3.29"
 http = "0.2.9"
 hyper = { version = "0.14.27", features = ["full"] }
 hyper-tls = "0.5.0"
-openssl = "0.10.41"
-trait-set = "0.3.0"
+openssl = "0.10.63"
+tokio-scoped = "0.2.0"
+tokio-openssl = "0.6.4"

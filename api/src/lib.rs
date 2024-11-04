@@ -3,6 +3,8 @@ use jequi::{Request, Response};
 use jequi_proxy::*; // TODO: proc macro to use all plugins to load custom apis
 use std::ffi::{c_int, CStr, CString};
 use std::os::raw::c_char;
+use std::ptr;
+use std::sync::Arc;
 
 unsafe fn get_object_from_pointer<'a, T>(obj: *mut T) -> &'a mut T {
     assert!(!obj.is_null());
@@ -51,7 +53,15 @@ pub unsafe extern "C" fn get_request_header(
 #[no_mangle]
 pub unsafe extern "C" fn get_request_body(req: *mut Request) -> *const c_char {
     let req = unsafe { get_object_from_pointer(req) };
-    let body = block_on(req.get_body());
+    let body = match req.try_get_body() {
+        Some(body) => body,
+        None => {
+            // TODO: implement a way to get the body async via ffi
+            println!("[ERROR] request body wasn't read yet");
+            return ptr::null();
+        }
+    };
+
     CString::new(body.as_ref().as_deref().unwrap_or(b""))
         .unwrap()
         .into_raw()

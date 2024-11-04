@@ -47,7 +47,7 @@ mod tests {
     use http::HeaderMap;
     use tokio::io::{AsyncReadExt, BufStream};
 
-    use crate::{body::RequestBody, http1::Http1Conn, RawStream, Request, Response, Uri};
+    use crate::{body::RequestBody, http1::Http1Conn, Request, Response, Uri};
 
     fn new_response(
         headers: HeaderMap,
@@ -191,7 +191,7 @@ aaaaa
     #[tokio::test]
     async fn test_write_body() {
         let stream = Cursor::new(Vec::new());
-        let mut http = Http1Conn::new(RawStream::Normal(stream));
+        let mut http = Http1Conn::new(stream);
         let resp = &mut http.response;
         resp.write_body(b"hello").unwrap();
         assert_eq!(b"hello", &resp.body_buffer[..]);

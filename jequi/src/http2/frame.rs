@@ -11,23 +11,12 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{AsyncRWSend, ConfigMap, Request, Response, Uri};
+use crate::{AsyncRWSend, AsyncRWSendBuf, ConfigMap, Request, Response, Uri};
 
-use super::{Stream, END_STREAM_FLAG, PADDED_FLAG, PRIORITY_FLAG};
-
-#[derive(Debug)]
-pub enum FrameType {
-    Data,
-    Headers,
-    Priority,
-    RstStream,
-    Settings,
-    PushPromise,
-    Ping,
-    GoAway,
-    WindowUpdate,
-    Continuation,
-}
+use super::{
+    BufStreamRaw, FrameType, Http2Conn, Http2Frame, Settings, Stream, END_STREAM_FLAG, PADDED_FLAG,
+    PRIORITY_FLAG,
+};
 
 impl From<&FrameType> for u8 {
     fn from(val: &FrameType) -> u8 {
@@ -66,31 +55,17 @@ impl TryFrom<u8> for FrameType {
     }
 }
 
-#[derive(Debug)]
-pub struct Http2Frame<P>
-where
-    P: AsRef<[u8]>,
-{
-    length: u32,
-    typ: FrameType,
-    flags: u8,
-    stream_id: u32,
-    payload: P,
-}
+unsafe impl<T: AsyncRWSendBuf> Send for BufStreamRaw<T> {}
+unsafe impl<T: AsyncRWSendBuf> Sync for BufStreamRaw<T> {}
 
-pub struct BufStreamRaw<T: AsyncRWSend>(pub *mut T);
-
-unsafe impl<T: AsyncRWSend> Send for BufStreamRaw<T> {}
-unsafe impl<T: AsyncRWSend> Sync for BufStreamRaw<T> {}
-
-impl<T: AsyncRWSend> BufStreamRaw<T> {
+impl<T: AsyncRWSendBuf> BufStreamRaw<T> {
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.0 }
     }
 }
 
 impl Http2Frame<Vec<u8>> {
-    pub async fn read_frame<T: AsyncRWSend>(mut stream: BufStreamRaw<T>) -> Http2Frame<Vec<u8>> {
+    pub async fn read_frame<T: AsyncRWSendBuf>(mut stream: BufStreamRaw<T>) -> Http2Frame<Vec<u8>> {
         let stream = stream.get_mut();
         let mut buf = vec![0; 9];
         stream.read_exact(&mut buf).await.unwrap();
@@ -112,17 +87,21 @@ impl Http2Frame<Vec<u8>> {
         }
     }
 
-    pub(crate) async fn process_frame(
+    pub(crate) async fn process_frame<T: AsyncRWSendBuf>(
         self,
-        streams: &mut HashMap<u32, Arc<Stream>>,
+        conn: &mut Http2Conn<T>,
         decoder: &mut Decoder<'_>,
         tx: Sender<u32>,
         config_map: Arc<ConfigMap>,
     ) {
         println!("recv: {:?}", self);
         match self.typ {
-            FrameType::Data => self.process_data(streams),
-            FrameType::Headers => self.process_headers(streams, decoder, tx, config_map).await,
+            FrameType::Settings => self.process_settings(&mut conn.settings).await,
+            FrameType::Data => self.process_data(&conn.streams),
+            FrameType::Headers => {
+                self.process_headers(&mut conn.streams, decoder, tx, config_map)
+                    .await
+            }
             _ => (),
         };
     }
@@ -160,6 +139,10 @@ impl<P: AsRef<[u8]>> Http2Frame<P> {
         BigEndian::write_u32(&mut buf[5..], self.stream_id & ((1 << 31) - 1));
         buf[9..].copy_from_slice(self.payload.as_ref());
         buf
+    }
+
+    async fn process_settings(self, settings: &mut Settings) {
+        ()
     }
 
     async fn process_headers(
@@ -207,6 +190,7 @@ impl<P: AsRef<[u8]>> Http2Frame<P> {
                 );
             })
             .unwrap();
+
         let stream_id = self.stream_id;
         let mut request = Arc::new(request);
         let mut response = Arc::new(Response::new());
@@ -231,7 +215,6 @@ impl<P: AsRef<[u8]>> Http2Frame<P> {
                 request.body.clone().get_body().await;
             }
 
-            println!("processed: {}", stream_id);
             tx.send(stream_id).await.unwrap();
         });
     }

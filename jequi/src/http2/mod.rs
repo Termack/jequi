@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use derivative::Derivative;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{Request, Response};
+use crate::{AsyncRWSendBuf, Request, Response};
 
 pub mod conn;
 pub mod frame;
@@ -17,6 +18,47 @@ pub(crate) struct Stream {
     request: Arc<Request>,
     response: Arc<Response>,
 }
+
+#[derive(Derivative)]
+#[derivative(Default)]
+pub(crate) struct Settings {
+    #[derivative(Default(value = "16_384"))]
+    max_frame_size: u32,
+}
+
+pub struct Http2Conn<T: AsyncRWSendBuf> {
+    pub conn: T,
+    settings: Settings,
+    streams: HashMap<u32, Arc<Stream>>,
+}
+
+#[derive(Debug)]
+pub struct Http2Frame<P>
+where
+    P: AsRef<[u8]>,
+{
+    length: u32,
+    typ: FrameType,
+    flags: u8,
+    stream_id: u32,
+    payload: P,
+}
+
+#[derive(Debug)]
+pub enum FrameType {
+    Data,
+    Headers,
+    Priority,
+    RstStream,
+    Settings,
+    PushPromise,
+    Ping,
+    GoAway,
+    WindowUpdate,
+    Continuation,
+}
+
+pub struct BufStreamRaw<T: AsyncRWSendBuf>(pub *mut T);
 
 impl Stream {
     fn consume(self) -> (u32, Arc<Request>, Arc<Response>) {

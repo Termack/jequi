@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use http::HeaderMap;
 
-use crate::{http1::Http1Conn, RawStream};
+use crate::http1::Http1Conn;
 
 use std::io::{Error, ErrorKind, Result};
 

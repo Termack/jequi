@@ -13,4 +13,4 @@ crate-type = ["staticlib", "dylib"]
 futures = "0.3.30"
 jequi = { path = "../jequi" }
 jequi_proxy = { path = "../plugins/jequi_proxy" }
-
+tokio = { version = "1", features = ["full"] }

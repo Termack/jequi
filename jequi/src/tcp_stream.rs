@@ -5,11 +5,11 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
-    http1::Http1Conn, http2::conn::Http2Conn, ssl::ssl_new, AsyncRWSend, ConfigMap, HttpConn,
-    RawStream,
+    http1::Http1Conn, http2::Http2Conn, ssl::ssl_new, AsyncRWSend, AsyncRWSendBuf, ConfigMap,
+    HttpConn, RawStream,
 };
 
 use crate as jequi;
@@ -24,16 +24,6 @@ impl<S: AsyncRWSend> AsyncRead for RawStream<S> {
             RawStream::Ssl(ref mut stream) => Pin::new(stream).poll_read(cx, buf),
             RawStream::Normal(ref mut stream) => Pin::new(stream).poll_read(cx, buf),
         }
-    }
-}
-
-impl<S: AsyncRWSend> AsyncBufRead for RawStream<S> {
-    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
-        todo!()
-    }
-
-    fn consume(self: Pin<&mut Self>, amt: usize) {
-        todo!()
     }
 }
 
@@ -82,19 +72,25 @@ impl<S: AsyncRWSend> AsyncWrite for RawStream<S> {
     }
 }
 
-pub async fn new_http_conn<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
-    stream: T,
-    config_map: Arc<ConfigMap>,
-) -> HttpConn<T> {
-    let plugin_list = &config_map.config;
-    let conf = get_plugin!(plugin_list, jequi).unwrap();
+impl<T: AsyncRWSend> HttpConn<T> {
+    pub async fn new(stream: T, config_map: Arc<ConfigMap>) -> HttpConn<T> {
+        let plugin_list = &config_map.config;
+        let conf = get_plugin!(plugin_list, jequi).unwrap();
 
-    if conf.tls_active {
-        let (stream, version) = ssl_new(stream, config_map.clone()).await;
-        if version == "h2" {
-            return HttpConn::HTTP2(Http2Conn::new(stream));
+        if conf.tls_active {
+            let (stream, version) = ssl_new(stream, config_map.clone()).await;
+            if version == "h2" {
+                return HttpConn::HTTP2(Http2Conn::new(RawStream::Ssl(stream)));
+            }
+            return HttpConn::HTTP1(Http1Conn::new(RawStream::Ssl(stream)));
         }
-        return HttpConn::HTTP1Ssl(Http1Conn::new(stream));
+        HttpConn::HTTP1(Http1Conn::new(RawStream::Normal(stream)))
     }
-    HttpConn::HTTP1(Http1Conn::new(stream))
+
+    pub async fn handle_connection(self, config_map: Arc<ConfigMap>) {
+        match self {
+            HttpConn::HTTP1(conn) => conn.handle_connection(config_map).await,
+            HttpConn::HTTP2(conn) => conn.handle_connection(config_map).await,
+        }
+    }
 }

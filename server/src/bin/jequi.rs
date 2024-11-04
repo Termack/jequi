@@ -1,10 +1,9 @@
 #![feature(let_chains)]
-use jequi::tcp_stream::new_http_conn;
 use jequi::{Config, ConfigMap, HttpConn};
 use plugins::load_plugins;
+use std::pin::Pin;
 use std::process;
 use std::{fs, sync::Arc};
-use tokio::io::BufStream;
 use tokio::{
     net::{TcpListener, TcpStream},
     signal::unix::{signal, SignalKind},

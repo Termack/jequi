@@ -27,7 +27,7 @@ use body::RequestBody;
 use futures::future::BoxFuture;
 use http::HeaderMap;
 use http1::Http1Conn;
-use http2::conn::Http2Conn;
+use http2::Http2Conn;
 use plugins::get_plugin;
 use serde::Deserialize;
 use serde_yaml::Value;
@@ -42,7 +42,8 @@ pub use hijack::PostRequestHandler;
 pub trait RequestHandlerFn =
     for<'a> Fn(&'a mut Request, &'a mut Response) -> BoxFuture<'a, PostRequestHandler>;
 
-pub trait AsyncRWSend = AsyncBufRead + AsyncRead + AsyncWrite + Unpin + Send + 'static;
+pub trait AsyncRWSendBuf = AsyncBufRead + AsyncRWSend;
+pub trait AsyncRWSend = AsyncRead + AsyncWrite + Unpin + Send + 'static;
 
 pub struct RequestHandler(pub Option<Arc<dyn RequestHandlerFn + Send + Sync>>);
 
@@ -141,32 +142,7 @@ pub struct Response {
     pub body_buffer: Vec<u8>,
 }
 
-pub enum HttpConn<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> {
-    HTTP1(Http1Conn<BufStream<T>>),
-    HTTP1Ssl(Http1Conn<BufStream<SslStream<T>>>),
-    HTTP2(Http2Conn<BufStream<SslStream<T>>>),
-}
-
-impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> HttpConn<T> {
-    pub async fn new(stream: T, config_map: Arc<ConfigMap>) -> HttpConn<T> {
-        let plugin_list = &config_map.config;
-        let conf = get_plugin!(plugin_list, jequi).unwrap();
-
-        if conf.tls_active {
-            let (stream, version) = ssl_new(stream, config_map.clone()).await;
-            if version == "h2" {
-                return HttpConn::HTTP2(Http2Conn::new(stream));
-            }
-            return HttpConn::HTTP1Ssl(Http1Conn::new(stream));
-        }
-        HttpConn::HTTP1(Http1Conn::new(stream))
-    }
-
-    pub async fn handle_connection(self, config_map: Arc<ConfigMap>) {
-        match self {
-            HttpConn::HTTP1(conn) => conn.handle_connection(config_map).await,
-            HttpConn::HTTP1Ssl(conn) => conn.handle_connection(config_map).await,
-            HttpConn::HTTP2(conn) => conn.handle_connection(config_map).await,
-        }
-    }
+pub enum HttpConn<T: AsyncRWSend> {
+    HTTP1(Http1Conn<BufStream<RawStream<T>>>),
+    HTTP2(Http2Conn<BufStream<RawStream<T>>>),
 }

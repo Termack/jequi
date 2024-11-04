@@ -9,32 +9,25 @@ use tokio::{
 };
 
 use crate::{
-    http2::{
-        frame::{BufStreamRaw, FrameType},
-        END_HEADERS_FLAG, PREFACE,
-    },
-    AsyncRWSend, ConfigMap, RawStream,
+    http2::{BufStreamRaw, FrameType, END_HEADERS_FLAG, PREFACE},
+    AsyncRWSend, AsyncRWSendBuf, ConfigMap,
 };
 
 use crate as jequi;
 
-use super::{frame::Http2Frame, Stream, END_STREAM_FLAG};
+use super::{Http2Conn, Http2Frame, Settings, END_STREAM_FLAG};
 
-pub struct Http2Conn<T: AsyncRWSend> {
-    pub conn: T,
-    streams: HashMap<u32, Arc<Stream>>,
-}
-
-impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> Http2Conn<BufStream<T>> {
+impl<T: AsyncRWSend> Http2Conn<BufStream<T>> {
     pub fn new(stream: T) -> Http2Conn<BufStream<T>> {
         Http2Conn {
             conn: BufStream::new(stream),
+            settings: Settings::default(),
             streams: HashMap::new(),
         }
     }
 }
 
-impl<T: AsyncRWSend> Http2Conn<T> {
+impl<T: AsyncRWSendBuf> Http2Conn<T> {
     async fn write_response(
         &mut self,
         stream_id: Option<u32>,
@@ -88,14 +81,17 @@ impl<T: AsyncRWSend> Http2Conn<T> {
             return;
         }
 
-        let last = body_len.div_ceil(conf.chunk_size) - 1;
-        for (i, chunk) in response.body_buffer.chunks(conf.chunk_size).enumerate() {
+        let frame_size = std::cmp::min(self.settings.max_frame_size as usize, conf.chunk_size);
+
+        let last = body_len.div_ceil(frame_size) - 1;
+        for (i, chunk) in response.body_buffer.chunks(frame_size).enumerate() {
             let response_body = Http2Frame::new(
                 FrameType::Data,
                 if i == last { END_STREAM_FLAG } else { 0 },
                 stream_id,
                 chunk,
             );
+            println!("send: {:?}", response_body.length);
 
             self.conn.write_all(&response_body.encode()).await.unwrap();
             self.conn.flush().await.unwrap();
@@ -103,6 +99,7 @@ impl<T: AsyncRWSend> Http2Conn<T> {
     }
 
     pub async fn handle_connection(mut self, config_map: Arc<ConfigMap>) {
+        println!("new_http2_conn");
         let mut buf = vec![0; 24];
         self.conn.read_exact(&mut buf).await.unwrap();
         if buf != PREFACE {
@@ -120,6 +117,8 @@ impl<T: AsyncRWSend> Http2Conn<T> {
         let mut decoder = Decoder::new();
         let mut encoder = Encoder::new();
 
+        // TODO: add better logic to read, write and process frames, also processing settings in
+        // this logic instead of doing it manually in this function
         let (tx, mut rx): (Sender<u32>, Receiver<u32>) = channel(100);
         let raw = BufStreamRaw(&mut self.conn);
         let read_fut = Http2Frame::read_frame(raw);
@@ -127,7 +126,7 @@ impl<T: AsyncRWSend> Http2Conn<T> {
         loop {
             tokio::select! {
             frame = &mut read_fut => {
-                frame.process_frame(&mut self.streams, &mut decoder, tx.clone(), config_map.clone()).await;
+                frame.process_frame(&mut self, &mut decoder, tx.clone(), config_map.clone()).await;
                 let raw = BufStreamRaw(&mut self.conn);
                 read_fut.set(Http2Frame::read_frame(raw));
             },

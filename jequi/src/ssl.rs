@@ -14,7 +14,7 @@ use openssl::x509::X509;
 
 use tokio_openssl::SslStream;
 
-use crate::{AsyncRWSend, ConfigMap, RawStream};
+use crate::{AsyncRWSend, AsyncRWSendBuf, ConfigMap};
 
 use crate as jequi;
 
@@ -112,7 +112,7 @@ impl<'de> Deserialize<'de> for SslCertConfig {
     }
 }
 
-pub async fn ssl_new<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+pub async fn ssl_new<T: AsyncRWSend>(
     stream: T,
     config_map: Arc<ConfigMap>,
 ) -> (SslStream<T>, String) {
@@ -190,7 +190,7 @@ mod tests {
 
     use crate::ssl::{SslCertConfig, SslKeyConfig};
     use crate::JequiConfig;
-    use crate::{http1::Http1Conn, Config, ConfigMap, Plugin, RawStream, RequestHandler};
+    use crate::{http1::Http1Conn, Config, ConfigMap, Plugin, RequestHandler};
 
     static ROOT_CERT_PATH: &str = "test/root-ca.pem";
 

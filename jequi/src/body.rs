@@ -27,18 +27,27 @@ impl Future for GetBody {
     type Output = Arc<Option<Vec<u8>>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !&self.body.is_written.load(Relaxed) {
-            self.body.get_mut().waker = Some(cx.waker().clone());
-            return Poll::Pending;
+        match self.body.clone().try_get_body() {
+            Some(body) => Poll::Ready(body),
+            None => {
+                self.body.get_mut().waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
         }
-
-        Poll::Ready(self.body.clone().bytes.clone())
     }
 }
 
 impl<'a> RequestBody {
     pub fn get_body(self: Arc<Self>) -> GetBody {
         GetBody { body: self }
+    }
+
+    pub fn try_get_body(self: Arc<Self>) -> Option<Arc<Option<Vec<u8>>>> {
+        if !&self.is_written.load(Relaxed) {
+            return None;
+        }
+
+        return Some(self.bytes.clone());
     }
 
     pub fn get_mut(self: &'a mut Arc<Self>) -> &'a mut Self {

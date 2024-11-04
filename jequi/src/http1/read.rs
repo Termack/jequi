@@ -13,28 +13,20 @@ use tokio::{
     pin,
 };
 
-use crate::{body::RequestBody, AsyncRWSend, RawStream, Request, Uri};
+use crate::{body::RequestBody, AsyncRWSendBuf, Request, Uri};
 
-use super::Http1Conn;
+use super::{Http1Conn, ReadUntilHandleEof};
 
-impl<T: AsyncRWSend> Http1Conn<T> {
-    async fn read_until_handle_eof(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<()> {
-        let n = self.conn.read_until(byte, buf).await?;
-        if n == 0 {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "unexpected eof"));
-        }
-        Ok(())
-    }
-
+impl<T: AsyncRWSendBuf> Http1Conn<T> {
     pub async fn parse_first_line(&mut self) -> Result<()> {
         let mut method = Vec::new();
         let mut uri = Vec::new();
         let mut version = Vec::new();
-        self.read_until_handle_eof(b' ', &mut method).await?;
+        self.conn.read_until_handle_eof(b' ', &mut method).await?;
         while uri.is_empty() || uri == [b' '] {
-            self.read_until_handle_eof(b' ', &mut uri).await?;
+            self.conn.read_until_handle_eof(b' ', &mut uri).await?;
         }
-        self.read_until_handle_eof(b'\n', &mut version).await?;
+        self.conn.read_until_handle_eof(b'\n', &mut version).await?;
 
         self.request.method = String::from_utf8_lossy(&method[..method.len() - 1]).to_string();
         self.request.uri = Uri::from(String::from_utf8_lossy(uri.trim_ascii()).to_string());
@@ -59,8 +51,8 @@ impl<T: AsyncRWSend> Http1Conn<T> {
             }
             let mut header = vec![next];
             let mut value = Vec::new();
-            self.read_until_handle_eof(b':', &mut header).await?;
-            self.read_until_handle_eof(b'\n', &mut value).await?;
+            self.conn.read_until_handle_eof(b':', &mut header).await?;
+            self.conn.read_until_handle_eof(b'\n', &mut value).await?;
 
             let header = String::from_utf8_lossy(header[..header.len() - 1].trim_ascii_start())
                 .to_lowercase();
@@ -85,15 +77,15 @@ impl<T: AsyncRWSend> Http1Conn<T> {
     }
 }
 
-pub struct ReadBody<'a, T: AsyncRWSend> {
+pub struct ReadBody<'a, T: AsyncRWSendBuf> {
     content_length: Result<usize>,
     conn: &'a mut T,
     body: Arc<RequestBody>,
 }
 
-unsafe impl<T: AsyncRWSend> Send for ReadBody<'_, T> {}
+unsafe impl<T: AsyncRWSendBuf> Send for ReadBody<'_, T> {}
 
-impl<'a, T: AsyncRWSend> Future for ReadBody<'a, T> {
+impl<'a, T: AsyncRWSendBuf> Future for ReadBody<'a, T> {
     type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

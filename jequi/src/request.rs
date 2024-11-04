@@ -94,6 +94,10 @@ impl Request {
     pub fn get_body(&self) -> GetBody {
         RequestBody::get_body(self.body.clone())
     }
+
+    pub fn try_get_body(&self) -> Option<Arc<Option<Vec<u8>>>> {
+        self.body.clone().try_get_body()
+    }
 }
 
 impl Default for Request {

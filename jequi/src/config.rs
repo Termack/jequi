@@ -43,16 +43,37 @@ impl JequiConfig for Config {
     }
 }
 
+fn merge_yaml(a: &mut Value, b: Value) {
+    match (a, b) {
+        (Value::Mapping(ref mut a), Value::Mapping(b)) => {
+            for (k, v) in b {
+                if let Some(b_seq) = v.as_sequence()
+                    && let Some(a_val) = a.get(&k)
+                    && let Some(a_seq) = a_val.as_sequence()
+                {
+                    a[&k] = [a_seq.as_slice(), b_seq.as_slice()].concat().into();
+                    continue;
+                }
+                if !a.contains_key(&k) {
+                    a.insert(k, v);
+                } else {
+                    merge_yaml(&mut a[&k], v);
+                }
+            }
+        }
+        (a, b) => *a = b,
+    }
+}
+
 fn merge_config_and_load_plugins(
-    mut _config_parser: &mut Value,
-    config_to_merge: &mut Value,
+    mut config_parser: &mut Value,
+    config_to_merge: Value,
     key_to_add: &str,
     value_to_add: String,
     load_plugins: fn(&Value) -> Vec<Plugin>,
 ) -> Vec<Plugin> {
     // TODO: maybe merging doesn't make sense, i need to think about it
-    // merge_yaml(&mut config_parser, config_to_merge);
-    let config_parser = config_to_merge;
+    merge_yaml(&mut config_parser, config_to_merge);
     if let Value::Mapping(ref mut config_parser) = config_parser {
         config_parser.insert(format!("config_{}", key_to_add).into(), value_to_add.into());
     }
@@ -65,21 +86,21 @@ impl ConfigMap {
         let main_conf_parser = ConfigMapParser::load_config(path);
 
         let config_parser = main_conf_parser.config.clone();
-        for (host, mut host_config_parser) in main_conf_parser.host.into_iter().flatten() {
+        for (host, host_config_parser) in main_conf_parser.host.into_iter().flatten() {
             let mut config_parser = config_parser.clone();
             let plugin_list = merge_config_and_load_plugins(
                 &mut config_parser,
-                &mut host_config_parser.config,
+                host_config_parser.config,
                 "host",
                 host.clone(),
                 load_plugins,
             );
             let mut path_config: Option<HashMap<PathBuf, Vec<Plugin>>> = None;
-            for (path, mut path_config_parser) in host_config_parser.path.into_iter().flatten() {
+            for (path, path_config_parser) in host_config_parser.path.into_iter().flatten() {
                 let mut config_parser = config_parser.clone();
                 let plugin_list = merge_config_and_load_plugins(
                     &mut config_parser,
-                    &mut path_config_parser,
+                    path_config_parser,
                     "path",
                     path.to_string_lossy().to_string(),
                     load_plugins,
@@ -97,11 +118,11 @@ impl ConfigMap {
             );
         }
 
-        for (path, mut path_config_parser) in main_conf_parser.path.into_iter().flatten() {
+        for (path, path_config_parser) in main_conf_parser.path.into_iter().flatten() {
             let mut config_parser = config_parser.clone();
             let plugin_list = merge_config_and_load_plugins(
                 &mut config_parser,
-                &mut path_config_parser,
+                path_config_parser,
                 "path",
                 path.to_string_lossy().to_string(),
                 load_plugins,

@@ -1,12 +1,21 @@
 #![allow(clippy::flat_map_identity)]
 #![feature(let_chains)]
 #![feature(closure_lifetime_binder)]
+#![feature(trait_alias)]
+mod client;
+
+use client::Client;
 use futures::future::{BoxFuture, FutureExt};
+use http::uri::Scheme;
 use hyper::body::{self};
 use hyper::client::conn;
-use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
-use jequi::{JequiConfig, Plugin, PostRequestHandler, Request, RequestHandler, Response, Uri};
+use jequi::hijack::DynAsyncRWSend;
+use jequi::http1::Http1Conn;
+use jequi::{
+    JequiConfig, Plugin, PostRequestHandler, RawStream, Request, RequestHandler, Response, Uri,
+};
+use openssl::ssl::{Ssl, SslAcceptor, SslConnector, SslMethod};
 use rand::seq::SliceRandom;
 use serde::{de, Deserialize};
 use serde_yaml::Value;
@@ -15,8 +24,12 @@ use std::ffi::CStr;
 use std::fmt;
 use std::ops::Deref;
 use std::os::raw::c_char;
+use std::pin::Pin;
 use std::sync::Arc;
-use trait_set::trait_set;
+use tokio::io::AsyncReadExt;
+use tokio::net::{tcp, TcpStream};
+
+use tokio_openssl::SslStream;
 
 #[no_mangle]
 pub unsafe extern "C" fn set_request_uri(req: *mut Request, value: *const c_char) {
@@ -49,9 +62,8 @@ impl PartialEq for Config {
     }
 }
 
-trait_set! {
-    pub trait RequestProxyHandlerFn = for<'a> Fn(&'a mut Request, &'a mut Response) -> Option<BoxFuture<'a, Option<String>>>
-}
+pub trait RequestProxyHandlerFn =
+    for<'a> Fn(&'a mut Request, &'a mut Response) -> Option<BoxFuture<'a, Option<String>>>;
 
 pub struct RequestProxyHandler(pub Option<Arc<dyn RequestProxyHandlerFn + Send + Sync>>);
 
@@ -124,45 +136,60 @@ impl Config {
             })
         }
 
-        let (address, scheme) = {
-            let proxy_address = proxy_address.unwrap();
+        let mut client = Client::connect(proxy_address).await;
 
-            let mut it = proxy_address.splitn(2, "://");
+        client.send_request(req).await.unwrap();
 
-            let first = it.next().unwrap();
-            match it.next() {
-                Some(address) => (address, first),
-                None => (first, "https"),
+        client.get_response(resp).await.unwrap();
+
+        // let url = http::Uri::builder()
+        //     .scheme(scheme)
+        //     .authority(address)
+        //     .path_and_query(req.uri.path())
+        //     .build()
+        //     .unwrap();
+
+        // let mut request_builder = http::Request::builder().method(req.method.deref()).uri(url);
+        // req.headers.insert("Host", address.parse().unwrap());
+        // *request_builder.headers_mut().unwrap() = req.headers.clone();
+        // let bodyy = req.get_body().await.clone();
+        // let body = match bodyy.as_deref() {
+        //     None => Body::empty(),
+        //     Some(buf) => Body::from(buf.to_owned()),
+        // };
+        //
+        // let (mut request_sender, conn) = conn::handshake(stream).await.unwrap();
+        // spawn a task to poll the connection and drive the HTTP state
+        // tokio::spawn(async {
+        //     if let Err(e) = conn.await {
+        //         eprintln!("Error in connection: {}", e);
+        //     }
+        // });
+        //
+        // let request = request_builder.body(body).unwrap();
+        // let response = request_sender.send_request(request).await.unwrap();
+        // resp.status = response.status().as_u16() as usize;
+        // resp.headers = response.headers().clone();
+        // resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
+        //     .unwrap();
+
+        if let Some(upgrade) = resp.get_header("upgrade") {
+            if upgrade == "websocket" {
+                let mut server_conn = client.into_conn();
+                return PostRequestHandler::HijackConnection(Box::new(
+                    move |conn: Http1Conn<Box<dyn DynAsyncRWSend>>| {
+                        async move {
+                            let mut conn = conn.into_conn();
+                            tokio::io::copy_bidirectional(&mut conn, &mut server_conn)
+                                .await
+                                .unwrap();
+                        }
+                        .boxed()
+                    },
+                ));
             }
-        };
-
-        let url = http::Uri::builder()
-            .scheme(scheme)
-            .authority(address)
-            .path_and_query(req.uri.path())
-            .build()
-            .unwrap();
-        let mut request_builder = http::Request::builder().method(req.method.deref()).uri(url);
-        req.headers.insert("Host", address.parse().unwrap());
-        *request_builder.headers_mut().unwrap() = req.headers.clone();
-        let bodyy = req.get_body().await.clone();
-        let body = match bodyy.as_deref() {
-            None => Body::empty(),
-            Some(buf) => Body::from(buf.to_owned()),
-        };
-        let https = HttpsConnector::new();
-        // let (mut request_sender, connection) = conn::http1::handshake(tcp).await?;
-        let client = Client::builder().build::<_, Body>(https);
-        let request = request_builder.body(body).unwrap();
-        let response = client.request(request).await.unwrap();
-        resp.status = response.status().as_u16() as usize;
-        resp.headers = response.headers().clone();
-        resp.write_body(&body::to_bytes(response.into_body()).await.unwrap())
-            .unwrap();
+        }
         PostRequestHandler::Continue
-        // PostRequestHandler::HijackConnection(Box::new(
-        //     |_conn: Http1Conn<Box<dyn DynAsyncRWSend>>| {},
-        // ))
     }
 }
 

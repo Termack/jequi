@@ -186,12 +186,12 @@ mod tests {
     };
 
     use http::HeaderValue;
-    use jequi::{http1::Http1Conn, AsyncRWSend, RawStream, Uri};
+    use jequi::{http1::Http1Conn, AsyncRWSendBuf, RawStream, Uri};
     use tokio::io::{AsyncRead, AsyncWrite};
 
     use crate::{Config, PathKind};
 
-    async fn test_handle_request<T: AsyncRWSend>(
+    async fn test_handle_request<T: AsyncRWSendBuf>(
         conf: Arc<Config>,
         http: &mut Http1Conn<T>,
         uri: &str,

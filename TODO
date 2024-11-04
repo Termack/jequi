@@ -1,5 +1,6 @@
 IMPORTANT: Make a better implementation for reading body and http2 and implement tests for both
-Add Websocket
+TESTS FOR PROXY!!!
+Add timeout for reading data (including read_body)
 HTTP2 and some other things in http1 (like keepalive, chunked, gzip)
 Check test coverage
 Better way to load go code
